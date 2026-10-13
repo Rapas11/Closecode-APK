@@ -602,6 +602,10 @@ class BuildEngine(
                 )
             }
         }
+        val unsupportedBuildFeatures = ProjectBuildContract.validate(projectDir)
+        if (unsupportedBuildFeatures.isNotEmpty()) {
+            return@withContext BuildOutcome.ContractFailed(unsupportedBuildFeatures)
+        }
         val packageWarning = packageName?.let(TemplateContract::foreignPackageWarning)
             ?.let(::BuildWarning)
         val collisionWarning = packageName?.let { findPackageCollision(projectDir, it) }

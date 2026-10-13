@@ -1326,14 +1326,39 @@ internal fun IdeScreen(
                 when (val outcome = engine.build(projectRoot)) {
                     is com.closecode.build.BuildOutcome.ContractFailed -> {
                         val first = outcome.violations.first()
-                        logLines.appendCapped(
-                            LogLine(
-                                LogLevel.ERROR,
-                                "Package",
-                                "Not packable: ${first.path} — ${first.message}",
-                            ),
-                        )
-                        toast = "Not packable: ${first.message}"
+                        val diagnostics = outcome.violations.map { violation ->
+                            val line = Regex("""^Line (\d+):\s*""")
+                                .find(violation.message)
+                                ?.groupValues
+                                ?.getOrNull(1)
+                                ?.toIntOrNull()
+                                ?: 1
+                            ProjectDiagnostic(
+                                fileName = violation.path.substringAfterLast('/'),
+                                diagnostic = Diagnostic(
+                                    severity = Severity.ERROR,
+                                    message = violation.message,
+                                    offset = 0,
+                                    length = 0,
+                                    line = line,
+                                    column = 1,
+                                    code = "BUILD_CONTRACT",
+                                ),
+                            )
+                        }
+                        projectErrorList = diagnostics
+                        projectErrors = diagnostics.size
+                        buildErrorCount = diagnostics.size
+                        outcome.violations.forEach { violation ->
+                            logLines.appendCapped(
+                                LogLine(
+                                    LogLevel.ERROR,
+                                    "Build contract",
+                                    "${violation.path}: ${violation.message}",
+                                ),
+                            )
+                        }
+                        toast = first.message.removePrefix(Regex("""^Line \d+:\s*""").find(first.message)?.value.orEmpty())
                     }
                     is com.closecode.build.BuildOutcome.NeedsSetup -> {
                         outcome.warnings.forEach { warning ->

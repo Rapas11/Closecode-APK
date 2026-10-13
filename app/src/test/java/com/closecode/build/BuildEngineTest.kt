@@ -1,6 +1,10 @@
 package com.closecode.build
 
 import com.closecode.ui.settings.InMemoryKeyValueStore
+import com.closecode.ui.model.ProjectConfig
+import com.closecode.ui.model.SelectedTemplate
+import com.closecode.ui.model.TemplateTab
+import com.closecode.ui.project.Scaffold
 import java.io.BufferedReader
 import java.io.InputStreamReader
 import java.io.File
@@ -93,6 +97,102 @@ class BuildEngineTest {
 
         assertTrue(result is BuildOutcome.NeedsSetup)
         assertEquals(existingBytes.toList(), lastGoodApk.readBytes().toList())
+    }
+
+    @Test
+    fun currentBlankAppScaffoldPassesTheBuildContract() {
+        val project = temporaryFolder.newFolder("blank-template")
+        Scaffold.filesFor(
+            projectName = "Blank App",
+            selection = SelectedTemplate(TemplateTab.App, 0),
+            config = ProjectConfig(packageName = "com.closecode.blankapp"),
+        ).forEach { file ->
+            val destination = File(project, file.path)
+            checkNotNull(destination.parentFile).mkdirs()
+            destination.writeText(file.content)
+        }
+
+        assertTrue(ProjectBuildContract.validate(project).toString(), ProjectBuildContract.validate(project).isEmpty())
+    }
+
+    @Test
+    fun unsupportedPluginNamesItsGradleFileAndLine() {
+        val project = temporaryFolder.newFolder("unsupported-plugin")
+        writeGradleFiles(
+            project,
+            appGradle = """
+                plugins {
+                    id("com.android.application")
+                    id("org.jetbrains.kotlin.android")
+                    id("com.google.gms.google-services")
+                }
+            """.trimIndent(),
+        )
+
+        val violations = ProjectBuildContract.validate(project)
+
+        assertTrue(violations.any {
+            it.path == "app/build.gradle.kts" &&
+                it.message.startsWith("Line 4:") &&
+                it.message.contains("com.google.gms.google-services")
+        })
+    }
+
+    @Test
+    fun changedKotlinPluginVersionIsRejected() {
+        val project = temporaryFolder.newFolder("changed-plugin-version")
+        val root = File(project, "build.gradle.kts")
+        root.writeText(
+            """
+                plugins {
+                    id("com.android.application") version "8.12.0" apply false
+                    id("org.jetbrains.kotlin.android") version "2.0.0" apply false
+                }
+            """.trimIndent(),
+        )
+        val app = File(project, "app/build.gradle.kts")
+        checkNotNull(app.parentFile).mkdirs()
+        app.writeText(
+            """
+                plugins {
+                    id("com.android.application")
+                    id("org.jetbrains.kotlin.android")
+                }
+            """.trimIndent(),
+        )
+
+        val violations = ProjectBuildContract.validate(project)
+
+        assertTrue(violations.any {
+            it.path == "build.gradle.kts" &&
+                it.message.contains("version 2.0.0") &&
+                it.message.contains("supports 1.9.24")
+        })
+    }
+
+    @Test
+    fun unsupportedLibraryIsRejectedBeforeToolchainSetup() = runBlocking {
+        val project = temporaryFolder.newFolder("unsupported-library")
+        writeGradleFiles(
+            project,
+            appGradle = """
+                plugins {
+                    id("com.android.application")
+                    id("org.jetbrains.kotlin.android")
+                }
+                dependencies {
+                    implementation("androidx.room:room-runtime:2.6.1")
+                }
+            """.trimIndent(),
+        )
+
+        val result = BuildEngine(newStore()).build(project)
+
+        assertTrue(result is BuildOutcome.ContractFailed)
+        val violation = (result as BuildOutcome.ContractFailed).violations.single()
+        assertEquals("app/build.gradle.kts", violation.path)
+        assertTrue(violation.message.startsWith("Line 6:"))
+        assertTrue(violation.message.contains("androidx.room:room-runtime:2.6.1"))
     }
 
     @Test
@@ -349,5 +449,19 @@ class BuildEngineTest {
         checkNotNull(manifest.parentFile).mkdirs()
         manifest.writeText("""<manifest package="$packageName" />""")
         return project
+    }
+
+    private fun writeGradleFiles(project: File, appGradle: String) {
+        File(project, "build.gradle.kts").writeText(
+            """
+                plugins {
+                    id("com.android.application") version "8.12.0" apply false
+                    id("org.jetbrains.kotlin.android") version "1.9.24" apply false
+                }
+            """.trimIndent(),
+        )
+        val app = File(project, "app/build.gradle.kts")
+        checkNotNull(app.parentFile).mkdirs()
+        app.writeText(appGradle)
     }
 }

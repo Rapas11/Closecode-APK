@@ -36,8 +36,8 @@ android {
         applicationId = "com.closecode"
         minSdk = 29
         targetSdk = 35
-        versionCode = 8
-        versionName = "1.0.7"
+        versionCode = 9
+        versionName = "1.0.8"
         buildConfigField("String", "SOURCE_REVISION", "\"$closecodeSourceLabel\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
