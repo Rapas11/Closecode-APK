@@ -1,0 +1,1111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Closecode — plan preview (interactive)</title>
+<style>
+:root{
+  --bg:#0B0F16; --panel:#131923; --panel2:#1A2230; --ln:#263043;
+  --tx:#E7ECF5; --mu:#8B98B0; --ac:#7B9BFF; --sel:#1C2A52; --editor:#0F141D;
+  --red:#FF6B81; --amber:#F0B429; --ok:#3ECF9B; --purple:#5B3FD1;
+  --pillBg:#4A2A31; --pillTx:#FFB4BD;
+  --kw:#B794FF; --str:#6FE0B0; --cmt:#5D6A82; --fn:#7FB2FF; --num:#FFA86B;
+  --ann:#F5C26B; --type:#E5C07B; --scrim:rgba(0,0,0,.35);
+  --line-h:36px;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;padding:0}
+body{
+  background:#070A10;color:var(--tx);
+  font:15px/1.5 ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  padding:20px 16px 60px;
+}
+a{color:var(--ac)}
+
+/* ---------- page chrome ---------- */
+.page{max-width:1240px;margin:0 auto}
+.title{display:flex;flex-wrap:wrap;gap:14px;align-items:center;justify-content:space-between;margin-bottom:6px}
+h1{font-size:21px;margin:0;letter-spacing:-.2px}
+.sub{color:var(--mu);font-size:13.5px;margin:0 0 18px;max-width:74ch}
+.toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.btn{
+  background:var(--panel2);border:1px solid var(--ln);color:var(--tx);
+  padding:8px 14px;border-radius:9px;font-size:13.5px;font-weight:600;cursor:pointer;
+}
+.btn:hover{border-color:var(--ac)}
+.btn.on{background:var(--ac);border-color:var(--ac);color:#08111F}
+.stage{display:flex;gap:26px;align-items:flex-start;flex-wrap:wrap}
+
+/* ---------- phone ---------- */
+.phone{
+  width:412px;min-width:340px;flex:0 0 auto;
+  background:#000;border-radius:34px;padding:8px;
+  border:1px solid #23262E;
+  box-shadow:0 30px 70px rgba(0,0,0,.55);
+}
+.screen{
+  position:relative;overflow:hidden;background:var(--bg);
+  border-radius:27px;height:872px;display:flex;flex-direction:column;
+}
+.statusbar{display:flex;justify-content:space-between;padding:9px 18px 3px;font-size:12.5px;color:var(--mu);font-weight:600}
+.statusbar .r{display:flex;gap:7px;align-items:center}
+
+/* header */
+.hdr{display:flex;align-items:center;gap:10px;padding:8px 14px 10px}
+.logo{width:34px;height:34px;border-radius:9px;background:var(--panel2);border:1px solid var(--ln);flex:0 0 auto}
+.proj{font-size:19px;font-weight:700;letter-spacing:-.3px;flex:1}
+.ic{width:34px;height:34px;border-radius:9px;display:grid;place-items:center;color:var(--mu);cursor:pointer;font-size:15px;background:transparent;border:0}
+.ic:hover{background:var(--panel2);color:var(--tx)}
+.ic.act{background:var(--sel);color:var(--ac)}
+.run{background:var(--ac);color:#08111F;border:0;border-radius:9px;height:34px;padding:0 15px;font-weight:700;font-size:14px;display:flex;align-items:center;gap:6px;cursor:pointer}
+
+/* tab strip */
+.tabs{display:flex;align-items:center;height:50px;border-bottom:1px solid var(--ln);padding-right:8px}
+.chev{width:44px;height:100%;border-right:1px solid var(--ln);display:grid;place-items:center;color:var(--mu);cursor:pointer;font-size:15px;background:transparent;border-top:0;border-left:0;border-bottom:0}
+.chev.open{color:var(--ac)}
+.tstrip{display:flex;gap:7px;align-items:center;overflow-x:auto;padding:0 8px;flex:1;scrollbar-width:none}
+.tstrip::-webkit-scrollbar{display:none}
+.ftab{display:flex;align-items:center;gap:7px;height:34px;padding:0 9px 0 7px;border-radius:14px;background:var(--panel2);white-space:nowrap;font-size:13.5px;font-weight:600;cursor:pointer;flex:0 0 auto}
+.ftab.sel{background:var(--sel);color:var(--ac)}
+.kt{width:20px;height:20px;border-radius:6px;background:rgba(123,63,228,.2);color:#7B3FE4;font-size:10px;font-weight:800;display:grid;place-items:center}
+.xm{width:20px;height:20px;border-radius:6px;background:rgba(36,87,255,.18);color:var(--fn);font-size:10px;font-weight:800;display:grid;place-items:center}
+.ht{width:20px;height:20px;border-radius:6px;background:rgba(62,207,155,.16);color:var(--ok);font-size:10px;font-weight:800;display:grid;place-items:center}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--red);display:inline-block}
+.close{color:var(--mu);font-size:13px;padding:0 2px}
+.tend{width:34px;display:grid;place-items:center;color:var(--mu);cursor:pointer;flex:0 0 auto}
+
+/* path bar */
+.pathbar{display:flex;align-items:center;gap:10px;padding:9px 12px;border-bottom:1px solid var(--ln);background:var(--bg)}
+.crumbs{display:flex;align-items:center;gap:7px;flex:1;min-width:0;overflow:hidden;font-size:13.5px;color:var(--mu);font-weight:600}
+.crumbs b{color:var(--tx);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.crumbs .sep{color:var(--ln)}
+.pbtn{width:34px;height:30px;border-radius:9px;display:grid;place-items:center;background:transparent;border:1px solid transparent;color:var(--mu);cursor:pointer;font-size:14px}
+.pbtn:hover{background:var(--panel2)}
+.pbtn.on{background:var(--purple);border-color:var(--purple);color:#fff}
+.pbtn.hide{display:none}
+
+/* content */
+.content{flex:1;min-height:0;position:relative;display:flex;background:var(--editor)}
+.code{flex:1;min-width:0;overflow:auto;position:relative;padding-top:10px}
+.code::-webkit-scrollbar{width:6px;height:6px}
+.code::-webkit-scrollbar-thumb{background:#2A3547;border-radius:6px}
+
+/* rows: one row = number + code, so they can never drift */
+.row{display:flex;align-items:flex-start;min-height:var(--line-h);position:relative}
+.num{
+  flex:0 0 56px;width:56px;text-align:right;padding-right:12px;
+  color:var(--cmt);font-size:12.5px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
+  line-height:var(--line-h);user-select:none;position:relative;
+}
+.row.err .num{color:var(--red);font-weight:700}
+.row.err .num::before{
+  content:"";position:absolute;left:11px;top:calc(50% - 3.5px);
+  width:7px;height:7px;border-radius:50%;background:var(--red);
+}
+.src{
+  flex:1;min-width:0;white-space:pre;line-height:var(--line-h);
+  font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--tx);
+  padding-right:12px;position:relative;
+}
+.k{color:var(--kw)} .s{color:var(--str)} .c{color:var(--cmt);font-style:italic}
+.f{color:var(--fn)} .t{color:var(--type)} .a{color:var(--ann)} .n{color:var(--num)}
+
+/* pill — AFTER: sits after the line's text with a gap */
+.pill{
+  display:inline-flex;align-items:center;gap:7px;margin-left:14px;
+  height:22px;padding:0 9px;border-radius:11px;background:var(--pillBg);
+  color:var(--pillTx);font-size:12px;font-weight:600;
+  font-family:ui-sans-serif,system-ui,sans-serif;vertical-align:middle;
+  white-space:nowrap;max-width:60%;overflow:hidden;cursor:pointer;
+}
+.pill .code{font-family:ui-monospace,monospace;opacity:.75;font-size:11px}
+.badge{
+  background:rgba(128,128,128,.28);border-radius:9px;padding:1px 6px;font-size:11px;
+  display:inline-flex;gap:3px;align-items:center;
+}
+
+/* BEFORE state: numbers drift 2x, pill covers the code */
+.before .row{min-height:calc(var(--line-h) * 2)}
+.before .num{line-height:calc(var(--line-h) * 2)}
+.before .src{line-height:var(--line-h)}
+.before .pillwrap{
+  position:absolute;left:0;right:auto;top:0;display:block;max-width:none;margin:0;
+  transform:translateX(-46px);z-index:3;
+}
+.before .pill{max-width:none;overflow:hidden;text-overflow:ellipsis;display:block;
+  width:max-content;max-width:52vw;transform:none}
+.before .pill-inline{display:none}
+.pillwrap{display:none}
+
+.gutterrule{position:absolute;left:56px;top:0;bottom:0;width:1px;background:var(--ln);z-index:2;pointer-events:none}
+
+/* lightbulb */
+.bulb{
+  position:absolute;left:4px;width:26px;height:26px;border-radius:50%;
+  background:#1F1F26;border:1px solid #9C9CAB;color:#F5DC8A;
+  display:grid;place-items:center;font-size:13px;cursor:pointer;z-index:4;
+}
+
+/* ---------- side panel (72%) ---------- */
+.scrim{position:absolute;inset:0;background:var(--scrim);z-index:20;display:none}
+.scrim.on{display:block}
+.panel{
+  position:absolute;left:0;top:0;bottom:0;width:72%;background:var(--panel);
+  border-right:1px solid var(--ln);z-index:21;display:none;flex-direction:column;
+}
+.panel.on{display:flex}
+.ptabs{display:flex;gap:6px;padding:10px;border-bottom:1px solid var(--ln)}
+.ptab{
+  flex:1;height:36px;border-radius:9px;background:transparent;border:1px solid var(--ln);
+  color:var(--mu);font-weight:700;font-size:13.5px;cursor:pointer;display:flex;
+  align-items:center;justify-content:center;gap:7px;
+}
+.ptab.on{background:var(--sel);border-color:var(--ac);color:var(--ac)}
+.pbody{flex:1;overflow:auto;padding:10px 8px 20px}
+.pbody::-webkit-scrollbar{width:6px}.pbody::-webkit-scrollbar-thumb{background:#2A3547;border-radius:6px}
+
+/* explorer */
+.exp-hd{display:flex;gap:8px;align-items:center;padding:4px 6px 12px}
+.exp-hd .t{font-size:12px;font-weight:800;color:var(--mu);letter-spacing:1.1px;flex:1}
+.mini{width:30px;height:30px;border-radius:8px;background:var(--panel2);border:1px solid var(--ln);
+  color:var(--tx);cursor:pointer;font-size:14px}
+.mini:hover{border-color:var(--ac);color:var(--ac)}
+.tree{list-style:none;margin:0;padding:0}
+.trow{display:flex;align-items:center;gap:8px;height:34px;padding:0 8px;border-radius:7px;cursor:pointer;font-size:13.5px;color:var(--tx)}
+.trow:hover{background:var(--panel2)}
+.trow.sel{background:var(--sel);color:var(--ac);font-weight:700}
+.trow .gl{width:14px;text-align:center;color:var(--mu);font-size:10px}
+.trow .ico{font-size:12px}
+.trow.file{color:#C6D0E0}
+.trow.file .spacer{width:14px}
+.folder-children{padding-left:17px}
+.folder-children.closed{display:none}
+
+/* ---------- github ---------- */
+.gh-card{background:var(--panel2);border:1px solid var(--ln);border-radius:14px;padding:14px;margin-bottom:12px}
+.gh-card h4{margin:0 0 4px;font-size:15px;display:flex;gap:8px;align-items:center}
+.gh-card p{margin:0 0 12px;color:var(--mu);font-size:13px}
+.branchbtn{display:flex;align-items:center;gap:10px;width:100%;background:var(--panel2);border:1px solid var(--ln);
+  border-radius:12px;padding:11px 13px;cursor:pointer;text-align:left;color:var(--tx);margin-bottom:10px}
+.branchbtn .lbl{font-size:11.5px;color:var(--mu);display:block}
+.branchbtn .val{font-size:15px;font-weight:800}
+.ghempty{text-align:center;padding:40px 18px}
+.ghempty .circ{width:74px;height:74px;border-radius:50%;background:var(--panel2);display:grid;place-items:center;margin:0 auto 16px;font-size:28px;color:var(--mu)}
+.ghempty h3{margin:0 0 8px;font-size:17px}
+.ghempty p{margin:0 auto 22px;color:var(--mu);font-size:13.5px;max-width:34ch}
+.primary{background:#C9BBFF;color:#1B1140;border:0;border-radius:10px;padding:12px 18px;font-weight:800;font-size:14.5px;cursor:pointer;display:inline-flex;gap:7px;align-items:center}
+.primary.full{width:100%;justify-content:center}
+.linkbtn{background:none;border:0;color:#C9BBFF;font-weight:700;font-size:14px;cursor:pointer;padding:12px}
+.ghrow{display:flex;align-items:center;gap:10px;padding:9px 4px;border-bottom:1px solid var(--ln)}
+.ghrow .st{width:22px;height:22px;border-radius:6px;background:rgba(62,207,155,.16);color:var(--ok);
+  font-size:11px;font-weight:800;display:grid;place-items:center;flex:0 0 auto}
+.ghrow .nm{font-size:13.5px;font-weight:600}
+.ghrow .pth{font-size:11.5px;color:var(--mu)}
+.ghrow .grow{flex:1;min-width:0}
+.ghrow .act{color:var(--ac);font-size:17px;background:none;border:0;cursor:pointer;padding:4px 7px}
+.hdrline{display:flex;align-items:center;justify-content:space-between;padding:12px 4px 4px}
+.hdrline b{font-size:12.5px;letter-spacing:.8px;color:var(--mu)}
+.hdrline .stageall{color:#C9BBFF;font-weight:800;font-size:13.5px;background:none;border:0;cursor:pointer}
+.commitbox{background:var(--panel2);border:1px solid var(--ln);border-radius:12px;padding:12px;margin-top:14px;color:var(--mu);font-size:14px;min-height:74px}
+.note{color:var(--mu);font-size:12.5px;padding:10px 4px;line-height:1.45}
+.checkrow{display:flex;gap:10px;align-items:center;margin-top:12px;font-size:13.5px}
+.cbx{width:20px;height:20px;border-radius:5px;background:var(--purple);color:#fff;display:grid;place-items:center;font-size:12px}
+.ghbtn{background:#C9BBFF;color:#1B1140;border:0;border-radius:10px;padding:11px 16px;font-weight:800;font-size:14px;cursor:pointer;display:inline-flex;gap:7px;align-items:center;margin-top:12px}
+.input{width:100%;background:var(--panel2);border:1px solid var(--ln);border-radius:11px;padding:13px;color:var(--tx);
+  font-size:14.5px;margin-bottom:10px;display:flex;gap:9px;align-items:center}
+.input.ph{color:var(--mu)}
+.warnline{color:var(--red);font-weight:700;font-size:13.5px;margin:6px 0 12px}
+.stateline{color:var(--mu);font-size:13.5px;margin-bottom:12px}
+.syncrow{display:flex;justify-content:space-between;align-items:center;padding:8px 4px}
+
+/* ---------- block editor ---------- */
+.blocks{flex:1;overflow:auto;padding:14px 12px 24px;display:none;background:var(--editor)}
+.blocks.on{display:block}
+.blocks.off{display:none}
+.blk{
+  border-radius:11px;border:1px solid var(--ln);background:var(--panel2);
+  margin-bottom:8px;padding:9px 11px;cursor:grab;font-family:ui-monospace,monospace;
+  font-size:13px;color:var(--tx);position:relative;
+}
+.blk:active{cursor:grabbing}
+.blk.dragging{opacity:.4}
+.blk.over{border-color:var(--ac);box-shadow:0 0 0 1px var(--ac)}
+.blk .hd{display:flex;align-items:center;gap:7px;font-weight:700;font-family:ui-sans-serif,system-ui}
+.blk .knob{width:9px;height:9px;border-radius:3px;background:var(--mu);flex:0 0 auto}
+.blk.classblk{background:rgba(245,194,107,.13);border-color:rgba(245,194,107,.4)}
+.blk.classblk .knob{background:var(--ann)}
+.blk.fnblk{background:rgba(62,207,155,.11);border-color:rgba(62,207,155,.42)}
+.blk.fnblk .knob{background:var(--ok)}
+.blk.stmtblk{background:var(--panel2);padding:8px 11px}
+.blk.kid{margin-left:16px}
+.blk .sub{margin-top:7px;padding-left:14px;border-left:2px solid rgba(255,255,255,.07)}
+.adddash{border:1.5px dashed var(--ln);border-radius:11px;padding:10px;text-align:center;color:var(--mu);
+  font-size:13px;cursor:pointer;background:transparent;width:100%;margin-top:4px}
+.adddash:hover{border-color:var(--ac);color:var(--ac)}
+.addblock{position:absolute;right:14px;bottom:74px;background:var(--purple);color:#fff;border:0;
+  border-radius:11px;padding:12px 17px;font-weight:800;font-size:14px;cursor:pointer;display:none;
+  gap:7px;align-items:center;box-shadow:0 8px 24px rgba(91,63,209,.5);z-index:8}
+.addblock.on{display:flex}
+.blockhint{background:rgba(123,155,255,.1);border:1px solid rgba(123,155,255,.3);color:#B9CBFF;
+  border-radius:10px;padding:10px 12px;font-size:12.5px;margin-bottom:12px;line-height:1.5}
+
+/* ---------- preview ---------- */
+.preview{flex:1;overflow:auto;display:none;padding:16px;background:var(--editor)}
+.preview.on{display:block}
+.phonemock{max-width:300px;margin:10px auto;border:7px solid #202733;border-radius:32px;overflow:hidden;background:#11151C}
+.pm-hd{background:#1B2431;padding:16px;font-weight:800;font-size:16px}
+.pm-bd{padding:16px;color:#C6D0E0;font-size:14px;min-height:150px}
+.pm-btn{margin:14px 16px;background:var(--ac);color:#08111F;border:0;border-radius:9px;padding:11px;font-weight:800;width:calc(100% - 32px)}
+.checker{max-width:250px;margin:24px auto;height:250px;border:7px solid #202733;border-radius:18px;
+  background-image:linear-gradient(45deg,#2A2F38 25%,transparent 25%),linear-gradient(-45deg,#2A2F38 25%,transparent 25%),
+  linear-gradient(45deg,transparent 75%,#2A2F38 75%),linear-gradient(-45deg,transparent 75%,#2A2F38 75%);
+  background-size:20px 20px;background-position:0 0,0 10px,10px -10px,-10px 0;
+  display:grid;place-items:center;background-color:#1A1D23}
+.checker .robot{font-size:76px}
+.webframe{width:100%;height:330px;border:1px solid var(--ln);border-radius:12px;background:#fff}
+.hosturl{font-family:ui-monospace,monospace;font-size:11.5px;color:var(--mu);background:var(--panel2);
+  border:1px solid var(--ln);border-radius:8px;padding:7px 9px;margin-bottom:10px;overflow:hidden;text-overflow:ellipsis}
+.previewnote{color:var(--mu);font-size:12.5px;margin-top:10px;line-height:1.5}
+
+/* ---------- tool row ---------- */
+.toolrow{
+  display:flex;gap:4px;align-items:center;padding:7px 8px;border-top:1px solid var(--ln);
+  background:var(--panel);overflow-x:auto;scrollbar-width:none;
+  transition:opacity .18s, transform .18s;
+}
+.toolrow::-webkit-scrollbar{display:none}
+.toolrow.idle{opacity:0;transform:translateY(6px);pointer-events:none;height:0;padding:0;border-top:0;overflow:hidden}
+.tool{background:transparent;border:0;color:var(--tx);font-family:ui-monospace,monospace;font-size:14.5px;
+  padding:7px 11px;border-radius:8px;cursor:pointer;flex:0 0 auto}
+.tool:hover{background:var(--panel2)}
+.tsep{width:1px;height:20px;background:var(--ln);margin:0 4px;flex:0 0 auto}
+
+/* ---------- bottom nav ---------- */
+.nav{display:flex;border-top:1px solid var(--ln);background:var(--panel);padding-bottom:6px}
+.navb{flex:1;background:none;border:0;color:var(--mu);padding:11px 0 6px;cursor:pointer;
+  display:flex;flex-direction:column;align-items:center;gap:4px;font-size:11.5px;font-weight:700;position:relative}
+.navb .gl{font-size:17px}
+.navb.on{color:var(--ac)}
+.navb .cnt{position:absolute;top:6px;right:26%;background:var(--red);color:#fff;font-size:10px;
+  border-radius:9px;padding:1px 5px;font-weight:800;display:none}
+
+/* ---------- sheets ---------- */
+.sheet{
+  position:absolute;left:0;right:0;bottom:0;background:var(--panel);
+  border-top:1px solid var(--ln);border-radius:20px 20px 0 0;z-index:30;
+  transform:translateY(102%);transition:transform .24s cubic-bezier(.2,.8,.2,1);
+  max-height:78%;display:flex;flex-direction:column;
+}
+.sheet.on{transform:translateY(0)}
+.handle{width:36px;height:4px;border-radius:2px;background:var(--ln);margin:9px auto 4px;flex:0 0 auto}
+.sheet h5{margin:6px 16px 8px;font-size:16px}
+.sheet .closeX{position:absolute;right:12px;top:12px;background:var(--panel2);border:1px solid var(--ln);
+  color:var(--tx);width:30px;height:30px;border-radius:50%;cursor:pointer}
+.sheetbody{overflow:auto;padding:6px 8px 22px}
+.sheetbody::-webkit-scrollbar{width:6px}.sheetbody::-webkit-scrollbar-thumb{background:#2A3547;border-radius:6px}
+.mrow{display:flex;gap:12px;align-items:center;padding:13px 12px;border-radius:11px;cursor:pointer}
+.mrow:hover{background:var(--panel2)}
+.mrow .mg{width:34px;height:34px;border-radius:9px;background:var(--panel2);display:grid;place-items:center;color:var(--ac);flex:0 0 auto}
+.mrow .mt{font-weight:700;font-size:14.5px}
+.mrow .ms{color:var(--mu);font-size:12.5px}
+.mdiv{height:1px;background:var(--ln);margin:7px 12px}
+.mlabel{font-size:11.5px;letter-spacing:1px;color:var(--mu);font-weight:800;padding:12px 12px 4px}
+
+.searchinput{display:flex;gap:9px;align-items:center;background:var(--panel2);border:1px solid var(--ln);
+  border-radius:12px;padding:12px 13px;margin:6px 12px 12px}
+.searchinput input{flex:1;background:none;border:0;color:var(--tx);font-size:15px;outline:none}
+.sres{padding:9px 14px;border-radius:9px;cursor:pointer;display:flex;gap:10px;align-items:flex-start}
+.sres:hover{background:var(--panel2)}
+.sres .fn{font-size:13px;font-weight:700;color:var(--ac);flex:0 0 auto;width:96px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sres .ln2{font-family:ui-monospace,monospace;font-size:12.5px;color:var(--mu);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sres mark{background:rgba(123,155,255,.28);color:#CFDDFF;border-radius:3px}
+
+/* AI panel */
+.ai{position:absolute;inset:0;background:var(--bg);z-index:15;display:none;flex-direction:column}
+.ai.on{display:flex}
+.aihd{padding:14px 16px;border-bottom:1px solid var(--ln);font-weight:800;font-size:16px;display:flex;align-items:center;gap:10px}
+.aib{flex:1;overflow:auto;padding:16px}
+.aicard{background:var(--panel2);border:1px solid var(--ln);border-radius:13px;padding:13px;margin-bottom:11px;font-size:13.5px;color:#C6D0E0;line-height:1.5}
+.aicard.me{background:var(--sel);border-color:rgba(123,155,255,.35);color:#DCE6FF}
+.chips{display:flex;gap:7px;flex-wrap:wrap;padding:0 16px 12px}
+.chip{background:var(--panel2);border:1px solid var(--ln);color:var(--mu);border-radius:99px;padding:6px 12px;font-size:12.5px;cursor:pointer}
+.chip:hover{border-color:var(--ac);color:var(--ac)}
+.ainput{margin:0 16px 14px;background:var(--panel2);border:1px solid var(--ln);border-radius:12px;padding:12px;color:var(--mu);font-size:14px}
+
+/* full-screen view (logcat/build from More) */
+.fullview{position:absolute;inset:0;background:var(--bg);z-index:16;display:none;flex-direction:column}
+.fullview.on{display:flex}
+.fvh{padding:14px 16px;border-bottom:1px solid var(--ln);display:flex;gap:11px;align-items:center;font-weight:800}
+.fvh .bk{background:var(--panel2);border:1px solid var(--ln);color:var(--tx);width:30px;height:30px;border-radius:8px;cursor:pointer}
+.fvb{flex:1;overflow:auto;padding:16px}
+.lrow{font-family:ui-monospace,monospace;font-size:12px;padding:5px 0;border-bottom:1px solid var(--ln);color:var(--mu);white-space:pre-wrap}
+.lrow.i{color:var(--ok)} .lrow.d{color:var(--ac)} .lrow.e{color:var(--red)}
+.trow2{display:flex;justify-content:space-between;padding:9px 0;border-bottom:1px solid var(--ln);font-family:ui-monospace,monospace;font-size:13px}
+
+/* android nav */
+.androidnav{display:flex;justify-content:center;gap:46px;padding:9px 0 6px;background:var(--panel);border-top:1px solid var(--ln)}
+.androidnav span{color:var(--mu);font-size:15px;cursor:pointer}
+
+/* ---------- notes column ---------- */
+.notes{flex:1;min-width:300px}
+.ncard{background:var(--panel);border:1px solid var(--ln);border-radius:15px;padding:16px 17px;margin-bottom:13px}
+.ncard h3{margin:0 0 9px;font-size:15px;display:flex;gap:9px;align-items:center}
+.ncard h3 .tag{font-size:10.5px;background:var(--sel);color:var(--ac);border-radius:99px;padding:2px 8px;letter-spacing:.5px}
+.ncard p{margin:0 0 8px;color:#B4BFD2;font-size:13.5px;line-height:1.55}
+.ncard ul{margin:6px 0 0;padding-left:19px;color:#B4BFD2;font-size:13.5px;line-height:1.6}
+.ncard code{background:var(--panel2);padding:1px 5px;border-radius:4px;font-size:12.5px}
+.warn{border-color:rgba(240,180,41,.45);background:rgba(240,180,41,.05)}
+.danger{border-color:rgba(255,107,129,.4);background:rgba(255,107,129,.05)}
+.jumplist{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:16px}
+.jumplist a{background:var(--panel2);border:1px solid var(--ln);border-radius:99px;padding:6px 12px;
+  font-size:12.5px;text-decoration:none;color:var(--tx);font-weight:600}
+.jumplist a:hover{border-color:var(--ac);color:var(--ac)}
+@media(max-width:860px){.phone{margin:0 auto}}
+</style>
+</head>
+<body>
+<div class="page">
+
+  <div class="title">
+    <div>
+      <h1>Closecode — interactive plan preview</h1>
+    </div>
+    <div class="toolbar">
+      <button class="btn" id="baBtn" onclick="toggleBefore()">Show the bug (before)</button>
+      <button class="btn" onclick="resetAll()">Reset</button>
+    </div>
+  </div>
+  <p class="sub">
+    Nothing here is app code yet. Every control inside the phone works: open the panel, switch Files and GitHub,
+    change the path-bar mode to code / blocks / preview, open Search and More as bottom sheets, and hide the tool row.
+    Use <b>Show the bug</b> to see the line-number drift and the pill covering your code exactly as they are today.
+  </p>
+
+  <div class="jumplist">
+    <a href="#n-bottom">3 bottom tabs</a>
+    <a href="#n-path">Path bar back</a>
+    <a href="#n-pill">Error pill</a>
+    <a href="#n-status">Status bar removed</a>
+    <a href="#n-tool">Tool row idle</a>
+    <a href="#n-panel">72% panel</a>
+    <a href="#n-search">Search sheet</a>
+    <a href="#n-blocks">Block editor</a>
+    <a href="#n-preview">Preview unchanged</a>
+    <a href="#n-github">GitHub</a>
+    <a href="#n-tests">Tests that change</a>
+  </div>
+
+  <div class="stage">
+  <!-- ================= PHONE ================= -->
+  <div class="phone">
+    <div class="screen" id="screen">
+
+      <div class="statusbar"><span>11:08</span><span class="r">📶 4G 🔋10%</span></div>
+
+      <!-- header -->
+      <div class="hdr">
+        <div class="logo"></div>
+        <div class="proj">Blank app</div>
+        <button class="ic" title="Search">🔍</button>
+        <button class="ic act" title="Save">💾</button>
+        <button class="ic" title="Undo">↶</button>
+        <button class="ic" title="Redo">↷</button>
+        <button class="run">▶ Run</button>
+        <button class="ic" title="More">⋮</button>
+      </div>
+
+      <!-- file tabs -->
+      <div class="tabs">
+        <button class="chev" id="chevBtn" onclick="togglePanel()" title="Files panel">❯</button>
+        <div class="tstrip">
+          <div class="ftab sel" onclick="openFile('MainActivity.kt')"><span class="kt">K</span>MainActivity.kt<span class="dot"></span><span class="close">✕</span></div>
+          <div class="ftab" onclick="openFile('Theme.kt')"><span class="kt">K</span>Theme.kt<span class="close">✕</span></div>
+          <div class="ftab" onclick="openFile('strings.xml')"><span class="xm">X</span>strings.xml<span class="close">✕</span></div>
+          <div class="ftab" onclick="openFile('index.html')"><span class="ht">H</span>index.html<span class="close">✕</span></div>
+        </div>
+        <div class="tend">⌄</div>
+      </div>
+
+      <!-- path bar (restored) -->
+      <div class="pathbar">
+        <div class="crumbs"><span>app</span><span class="sep">›</span><b id="crumb">MainActivity</b></div>
+        <button class="pbtn on" id="mCode" onclick="setMode('code')" title="Code">&lt;&gt;</button>
+        <button class="pbtn" id="mBlocks" onclick="setMode('blocks')" title="Block editor">▤</button>
+        <button class="pbtn hide" id="mPrev" onclick="setMode('preview')" title="Preview">🖼</button>
+      </div>
+
+      <!-- content -->
+      <div class="content" id="content">
+
+        <!-- CODE -->
+        <div class="code" id="codeView">
+          <div class="gutterrule"></div>
+          <div id="rows"></div>
+        </div>
+
+        <!-- BLOCKS -->
+        <div class="blocks" id="blocksView">
+          <div class="blockhint">
+            <b>Drag to reorder.</b> Each block maps to a real range in the file — dropping writes back to the source,
+            and the text editor updates immediately. Class → method → statement nesting comes from the existing scope tree.
+          </div>
+          <div class="blk classblk" draggable="true" data-id="c1">
+            <div class="hd"><span class="knob"></span>class MainActivity : ComponentActivity()</div>
+            <div class="sub">
+              <div class="blk fnblk" draggable="true" data-id="f1" style="margin-bottom:0">
+                <div class="hd"><span class="knob"></span>override fun onCreate(savedInstanceState: Bundle?)</div>
+                <div class="sub" id="stmtHost">
+                  <div class="blk stmtblk" draggable="true" data-id="s1">super.onCreate(savedInstanceState)</div>
+                  <div class="blk stmtblk" draggable="true" data-id="s2">setContent { … }</div>
+                  <div class="blk stmtblk" draggable="true" data-id="s3">ClosecodeTheme { … }</div>
+                  <div class="blk stmtblk" draggable="true" data-id="s4">Text("Hello, world")</div>
+                </div>
+              </div>
+            </div>
+            <button class="adddash" onclick="addBlock()">+ Add block</button>
+          </div>
+        </div>
+
+        <!-- PREVIEW -->
+        <div class="preview" id="prevView">
+          <div id="prevBody"></div>
+        </div>
+
+        <!-- lightbulb -->
+        <div class="bulb" id="bulb" style="top:196px" title="Quick fix">💡</div>
+      </div>
+
+      <!-- tool row (hides when idle) -->
+      <div class="toolrow" id="toolRow">
+        <button class="tool">Tab</button><button class="tool">//</button>
+        <span class="tsep"></span>
+        <button class="tool">˄</button><button class="tool">˅</button>
+        <button class="tool">⧉</button><button class="tool">⚠</button>
+        <span class="tsep"></span>
+        <button class="tool">{</button><button class="tool">}</button><button class="tool">(</button>
+      </div>
+
+      <!-- bottom nav: Search · AI · More -->
+      <div class="nav">
+        <button class="navb" id="navSearch" onclick="openSheet('search')"><span class="gl">🔍</span>Search<span class="cnt">2</span></button>
+        <button class="navb" id="navAI" onclick="openAI()"><span class="gl">✦</span>AI</button>
+        <button class="navb" id="navMore" onclick="openSheet('more')"><span class="gl">⋯</span>More</button>
+      </div>
+
+      <!-- android nav -->
+      <div class="androidnav" onclick="androidBack()" title="Back closes whatever is open">
+        <span>◁</span><span>○</span><span>▢</span>
+      </div>
+
+      <!-- ===== overlays ===== -->
+      <div class="scrim" id="scrim" onclick="androidBack()"></div>
+
+      <!-- side panel 72% -->
+      <div class="panel" id="panel">
+        <div class="ptabs">
+          <button class="ptab on" id="tabFiles" onclick="setPanelTab('files')">📄 Files</button>
+          <button class="ptab" id="tabGit" onclick="setPanelTab('git')">⑂ GitHub</button>
+        </div>
+
+        <!-- FILES -->
+        <div class="pbody" id="filesBody">
+          <div class="exp-hd">
+            <span class="t">EXPLORER</span>
+            <button class="mini" title="New file" onclick="toast('New file')">＋</button>
+            <button class="mini" title="New folder" onclick="toast('New folder')">🗀</button>
+            <button class="mini" title="Refresh" onclick="toast('Refreshed')">⟳</button>
+          </div>
+          <ul class="tree">
+            <li><div class="trow" onclick="tog(this)"><span class="gl">▾</span><span class="ico">🗀</span>app</div>
+              <ul class="tree folder-children">
+                <li><div class="trow" onclick="tog(this)"><span class="gl">▾</span><span class="ico">🗀</span>src</div>
+                  <ul class="tree folder-children">
+                    <li><div class="trow" onclick="tog(this)"><span class="gl">▾</span><span class="ico">🗀</span>main</div>
+                      <ul class="tree folder-children">
+                        <li><div class="trow file sel"><span class="spacer"></span><span class="ico" style="color:#7B3FE4">🅲</span>MainActivity.kt</div></li>
+                        <li><div class="trow file"><span class="spacer"></span><span class="ico" style="color:#7B3FE4">🅲</span>Theme.kt</div></li>
+                        <li><div class="trow file"><span class="spacer"></span><span class="ico" style="color:#7FB2FF">◇</span>index.html</div></li>
+                        <li><div class="trow file"><span class="spacer"></span><span class="ico" style="color:#7FB2FF">≡</span>strings.xml</div></li>
+                      </ul>
+                    </li>
+                    <li><div class="trow" onclick="tog(this)"><span class="gl">▸</span><span class="ico">🗀</span>res</div>
+                      <ul class="tree folder-children closed">
+                        <li><div class="trow file"><span class="spacer"></span><span class="ico">🖼</span>ic_launcher.png</div></li>
+                      </ul>
+                    </li>
+                  </ul>
+                </li>
+                <li><div class="trow file"><span class="spacer"></span><span class="ico">⚙</span>build.gradle.kts</div></li>
+              </ul>
+            </li>
+            <li><div class="trow file"><span class="spacer"></span><span class="ico">≡</span>.gitignore</div></li>
+            <li><div class="trow file"><span class="spacer"></span><span class="ico">≡</span>README.md</div></li>
+          </ul>
+          <div class="note" style="padding-top:14px">
+            <b>.git is hidden</b> — added to the hidden set before a repository exists, so its internals never
+            flood this list. <code>.gitignore</code> stays visible.<br><br>
+            Folders start collapsed. Tapping one hides its whole subtree while the folder row stays, and the
+            arrow flips. New file and New folder call functions that already existed but were never wired.
+          </div>
+        </div>
+
+        <!-- GITHUB -->
+        <div class="pbody" id="gitBody" style="display:none">
+          <div class="exp-hd">
+            <span class="t">SOURCE</span>
+            <button class="mini" onclick="ghState('empty')" title="No repo state">1</button>
+            <button class="mini" onclick="ghState('repo')" title="Repo with changes">2</button>
+            <button class="mini" onclick="ghState('menu')" title="Branch menu">3</button>
+            <button class="mini" onclick="ghState('publish')" title="Publish page">4</button>
+          </div>
+
+          <!-- state: no repo -->
+          <div id="ghEmpty">
+            <button class="branchbtn" onclick="toast('Branch menu')">
+              <span style="color:var(--ac)">⑂</span>
+              <span><span class="lbl">Branch</span><span class="val">Branch</span></span>
+              <span style="margin-left:auto;color:var(--mu)">⋯</span>
+            </button>
+            <div class="ghempty">
+              <div class="circ">⑂</div>
+              <h3>Not under version control</h3>
+              <p>Track this project with Git to keep a history of your changes, work on branches, and push to GitHub.</p>
+              <button class="primary" onclick="ghState('repo')">＋ Create repository</button><br>
+              <button class="linkbtn" onclick="ghState('publish')">Clone a repository</button>
+            </div>
+          </div>
+
+          <!-- state: repo with changes -->
+          <div id="ghRepo" style="display:none">
+            <button class="branchbtn">
+              <span style="color:var(--ac)">⑂</span>
+              <span><span class="lbl">Branch</span><span class="val">main ⌄</span></span>
+              <span style="margin-left:auto;color:var(--mu)" onclick="ghState('menu')">⋯</span>
+            </button>
+            <div class="syncrow">
+              <span style="color:var(--mu);font-size:13px">No remote set up</span>
+              <button class="chip" onclick="ghState('publish')">👤 Connect to GitHub</button>
+            </div>
+            <div class="hdrline"><b>CHANGES&nbsp;&nbsp;17</b><button class="stageall">Stage all</button></div>
+            <div class="note" style="padding-top:2px">Edited but not included yet. Stage a file to add it to the next commit.</div>
+            <div id="ghRows"></div>
+            <div class="commitbox">Commit message</div>
+            <div class="checkrow"><span class="cbx">✓</span> Amend last commit</div>
+            <div class="note">Stage a file to commit it.<br>A commit saves a snapshot of the staged files, on this device only.</div>
+          </div>
+
+          <!-- state: branch menu -->
+          <div id="ghMenu" style="display:none">
+            <button class="branchbtn">
+              <span style="color:var(--ac)">⑂</span>
+              <span><span class="lbl">Branch</span><span class="val">Branch</span></span>
+            </button>
+            <div class="gh-card">
+              <div class="mlabel" style="padding-left:0">REPOSITORY</div>
+              <div class="mrow" onclick="toast('History')"><span class="mg">⌛</span><span><div class="mt">History</div><div class="ms">Browse past commits</div></span></div>
+              <div class="mrow" onclick="toast('Stashes — not available in JGit')"><span class="mg">▤</span><span><div class="mt">Stashes</div><div class="ms">Stash changes</div></span></div>
+              <div class="mrow" onclick="ghState('publish')"><span class="mg">👤</span><span><div class="mt">GitHub</div><div class="ms">Your GitHub account, publishing, and pull requests</div></span></div>
+              <div class="mdiv"></div>
+              <div class="mlabel" style="padding-left:0">SYNC</div>
+              <div class="mrow" onclick="toast('Fetch — needs a remote')"><span class="mg">↻</span><span><div class="mt">Fetch</div><div class="ms">Check the remote for new commits without changing your files</div></span></div>
+              <div class="mrow" onclick="toast('Refreshed')"><span class="mg">↻</span><span><div class="mt">Refresh</div><div class="ms">Re-read the status of your files</div></span></div>
+              <div class="mdiv"></div>
+              <div class="mrow" onclick="toast('.gitignore entries added')"><span class="mg">📄</span><span><div class="mt">Add default .gitignore entries</div></span></div>
+            </div>
+          </div>
+
+          <!-- state: publish -->
+          <div id="ghPublish" style="display:none">
+            <div class="gh-card">
+              <h4>☁︎ Publish to GitHub</h4>
+              <p>Create a repository for this project and push the current branch to it.</p>
+              <div class="warnline">Make a commit before publishing.</div>
+              <div class="input">📁 My App</div>
+              <div class="input ph">📄 Description (optional)</div>
+              <div class="checkrow"><span class="cbx">✓</span> Private repository</div>
+              <button class="ghbtn" onclick="toast('Requires sign-in — device flow')">☁︎ Publish</button>
+            </div>
+            <div class="gh-card">
+              <h4>⇧ Remotes</h4>
+              <p>This project has no remote yet.</p>
+              <div class="input">⇧ origin</div>
+              <div class="input ph">⇧ Remote URL</div>
+              <button class="ghbtn" onclick="toast('Remote added')">＋ Add remote</button>
+            </div>
+            <div class="note">
+              <b>First use:</b> tapping GitHub, or Connect to GitHub, opens sign-in or clone. Sign-in uses the
+              device flow — a code and a link, approved in your browser. Client ID is pre-filled.
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- AI panel -->
+      <div class="ai" id="aiPanel">
+        <div class="aihd"><button class="bk" style="width:30px;height:30px;border-radius:8px;background:var(--panel2);border:1px solid var(--ln);color:var(--tx);cursor:pointer" onclick="androidBack()">←</button> AI</div>
+        <div class="aib">
+          <div class="aicard me">Explain what this error means</div>
+          <div class="aicard">This file has two unresolved references. <code>ClosecodeTheme</code> is declared in <b>Theme.kt</b> — it needs an import. <code>Text</code> comes from <code>androidx.compose.material3</code>.</div>
+        </div>
+        <div class="chips">
+          <span class="chip">Fix errors</span><span class="chip">Explain this file</span>
+          <span class="chip">Write a function</span><span class="chip">Add tests</span>
+        </div>
+        <div class="ainput">Ask about your code…</div>
+      </div>
+
+      <!-- full screen view: Logcat / Build from More -->
+      <div class="fullview" id="fullView">
+        <div class="fvh"><button class="bk" onclick="androidBack()">←</button><span id="fvTitle">Logcat</span></div>
+        <div class="fvb" id="fvBody"></div>
+      </div>
+
+      <!-- SEARCH bottom sheet -->
+      <div class="sheet" id="sheetSearch">
+        <div class="handle"></div>
+        <button class="closeX" onclick="closeSheets()">✕</button>
+        <h5>Search in project</h5>
+        <div class="searchinput">🔍<input id="q" placeholder="Find in files…" oninput="runSearch(this.value)"></div>
+        <div class="sheetbody" id="searchRes"></div>
+        <div class="note" style="padding:0 16px 16px">
+          A bottom sheet, not a full panel — the code stays visible above it.
+          <b>Tap anywhere above the sheet to dismiss</b>, or use the Android back button.
+        </div>
+      </div>
+
+      <!-- MORE bottom sheet -->
+      <div class="sheet" id="sheetMore">
+        <div class="handle"></div>
+        <button class="closeX" onclick="closeSheets()">✕</button>
+        <h5>More</h5>
+        <div class="sheetbody">
+          <div class="mrow" onclick="openFull('Logcat')"><span class="mg">☰</span><span><div class="mt">Logcat</div><div class="ms">Simulated output — labelled as such</div></span></div>
+          <div class="mrow" onclick="openFull('Build')"><span class="mg">⚒</span><span><div class="mt">Build</div><div class="ms">Simulated build — labelled as such</div></span></div>
+          <div class="mdiv"></div>
+          <div class="mrow" onclick="toast('Settings')"><span class="mg">⚙</span><span><div class="mt">Settings</div><div class="ms">Editor, git identity, GitHub</div></span></div>
+          <div class="mrow" onclick="toast('Theme toggled')"><span class="mg">◑</span><span><div class="mt">Toggle theme</div><div class="ms">Dark / light</div></span></div>
+          <div class="mdiv"></div>
+          <div class="mrow" onclick="toast('New project')"><span class="mg">＋</span><span><div class="mt">New project</div></span></div>
+          <div class="mrow" onclick="toast('Close project')"><span class="mg">✕</span><span><div class="mt">Close project</div></span></div>
+          <div class="note">Preview is <b>not</b> in this list — it lives on the path bar and only appears for files that can be previewed.</div>
+        </div>
+      </div>
+
+      <div id="toast" style="position:absolute;left:50%;bottom:120px;transform:translateX(-50%);
+           background:#1C2A52;color:#DCE6FF;border:1px solid rgba(123,155,255,.4);padding:10px 16px;
+           border-radius:11px;font-size:13.5px;z-index:60;opacity:0;transition:opacity .2s;pointer-events:none;white-space:nowrap"></div>
+    </div>
+  </div>
+
+  <!-- ================= NOTES ================= -->
+  <div class="notes">
+
+    <div class="ncard" id="n-bottom">
+      <h3>Bottom bar: Search · AI · More <span class="tag">decided</span></h3>
+      <p>Was <code>Code · Preview · AI · Logcat · Build</code> (five tabs, pinned by a test). Now three, matching your reference screenshots. The editor is always visible — there is no Code tab to return to.</p>
+      <ul>
+        <li><b>Search</b> → bottom sheet, real find-in-project</li>
+        <li><b>AI</b> → the AI panel</li>
+        <li><b>More</b> → bottom sheet: Logcat, Build, Settings, Theme, New project, Close project</li>
+      </ul>
+    </div>
+
+    <div class="ncard" id="n-path">
+      <h3>Path bar is back <span class="tag">decided</span></h3>
+      <p><code>app › MainActivity</code> with three buttons — no split-view button, you asked for that to go.</p>
+      <ul>
+        <li><code>&lt;&gt;</code> → code</li>
+        <li>layers → block editor</li>
+        <li>image → preview, <b>only for files that can be previewed</b> (open index.html above to see it appear)</li>
+      </ul>
+    </div>
+
+    <div class="ncard" id="n-pill">
+      <h3>Error pill no longer covers your code <span class="tag">bug fix</span></h3>
+      <p>Today the pill's anchor measures the <b>newline character</b>, which renders at the start of the <i>next</i> line — so it gets roughly zero and lands on top of your text.</p>
+      <p><b>Fix:</b> anchor on the last real character of the line plus a gap, and if it would run off the screen, wrap it to the right edge with reserved padding. The <code>⊕2</code> badge stays for lines with several problems.</p>
+      <p>Press <b>Show the bug</b> at the top to compare.</p>
+    </div>
+
+    <div class="ncard" id="n-status">
+      <h3>Status bar removed <span class="tag">decided</span></h3>
+      <p>The <code>Ready · Ln 16, Col 2 · Kotlin · 2 errors · 0 warnings</code> row is gone, as in your screenshots. You decided the totals can live on the pill's count badge, so nothing extra is added to the navigation.</p>
+      <p class="warn" style="border:0;background:none;padding:0"><b>Consequence:</b> the project-wide error and warning totals are no longer visible anywhere except the Problems sheet.</p>
+    </div>
+
+    <div class="ncard" id="n-tool">
+      <h3>Tool row hides when idle <span class="tag">decided</span></h3>
+      <p>Kept — you chose to keep it rather than delete it, because it is the only on-screen way to insert a tab, a brace or a comment on a soft keyboard. It fades out once you stop typing and comes back on the next tap.</p>
+      <p>Try it: tap in the code, wait a moment.</p>
+    </div>
+
+    <div class="ncard" id="n-panel">
+      <h3>72% side panel, Files · GitHub <span class="tag">decided</span></h3>
+      <p>Was a fixed 235&nbsp;dp — about half a phone. Now 72% of the screen, leaving a strip of editor, exactly as in your reference images.</p>
+      <ul>
+        <li><code>.git</code> hidden before a repository exists</li>
+        <li>collapse fixed — it currently hides only the folder row and leaves the children showing</li>
+        <li>New file / New folder wired to functions that already existed but were never called</li>
+        <li>the tree currently never refreshes after a change; that is fixed too</li>
+      </ul>
+    </div>
+
+    <div class="ncard" id="n-search">
+      <h3>Search is a bottom sheet <span class="tag">decided</span></h3>
+      <p>You wanted it not to cover the whole screen, with a tap above closing it. It searches file contents across the project and shows matching lines.</p>
+      <p>The Android back button also closes it.</p>
+    </div>
+
+    <div class="ncard" id="n-blocks">
+      <h3>Block editor <span class="tag">biggest item</span></h3>
+      <p>Full drag-and-drop that <b>writes back to the source</b>, always in sync with the text editor. Kotlin is chopped into class → method → statement; anything the analyzer can't structure falls back to one block per line.</p>
+      <p><b>Good news:</b> your analyzer already builds the tree this needs — <code>SymbolTable.root</code> holds scopes with <code>kind</code>, <code>name</code>, <code>start</code>/<code>end</code> and <code>children</code>. This is a walk of an existing structure, not new parsing.</p>
+      <p>Lives in the full editor area, or in the strip when a panel is beside it.</p>
+      <p class="danger" style="border:0;background:none;padding:0"><b>Scope risk:</b> cutting and re-pasting source ranges while keeping braces and indentation correct is fiddly, and it is the one feature where a bug could damage a file. It ships behind a test that round-trips a file through a reorder.</p>
+    </div>
+
+    <div class="ncard" id="n-preview">
+      <h3>Preview unchanged <span class="tag">explicit</span></h3>
+      <p>Nothing about your preview is being reworked. All three modes stay exactly as they are:</p>
+      <ul>
+        <li><b>Kotlin</b> → the static phone mock</li>
+        <li><b>Images</b> → checkerboard</li>
+        <li><b>Web</b> → served from your local host server into a WebView</li>
+      </ul>
+      <p>Open <code>index.html</code> in the tab strip to see the host preview and its URL.</p>
+    </div>
+
+    <div class="ncard" id="n-github">
+      <h3>GitHub <span class="tag">untestable here</span></h3>
+      <p>Steps 1–4 of the GitHub screen are shown above (no repo, changes list, branch menu, publish/remotes). Sign-in on first use via the device flow; your Client ID is pre-filled.</p>
+      <p class="danger" style="border:0;background:none;padding:0"><b>I cannot test any of this from this machine</b> — there is no route to github.com here. The first real sign-in happens on your phone, and a wrong token fails silently. Expect to debug it together.</p>
+      <p>Stash has no ready-made function in the Git library, so that one gets written by hand. Pull will refuse to merge conflicts rather than guess.</p>
+    </div>
+
+    <div class="ncard warn" id="n-tests">
+      <h3>Existing tests that must change <span class="tag">deliberate</span></h3>
+      <p>Not deleted — updated, because you are changing the design they pin:</p>
+      <ul>
+        <li>bottom bar expects 5 labels with <code>Code</code> first → becomes <code>Search, AI, More</code></li>
+        <li>tool row expected always present → present while typing</li>
+        <li>status bar existence → removed with it</li>
+        <li>Build task names → <b>unchanged</b>, Build is staying simulated</li>
+        <li>header's 8 items → unchanged</li>
+      </ul>
+    </div>
+
+    <div class="ncard warn">
+      <h3>Still outstanding <span class="tag">blocking</span></h3>
+      <ul>
+        <li><b>Your new Enter screenshots</b> — I need to know whether the extra lines are <i>numbered</i> and whether the status bar reads <code>Ln 3</code>. That decides which of two fixes is correct.</li>
+        <li>Confirmation that <b>Logcat and Build open full screen</b> from More, as they do today.</li>
+        <li>The Build files I half-wrote do not compile — <b>Step 0 deletes them</b> before anything else.</li>
+      </ul>
+    </div>
+
+  </div>
+  </div>
+</div>
+
+<script>
+/* ============ code sample ============ */
+const SRC = [
+  {h:'<span class="k">package</span> com.closecode.blankapp', e:0},
+  {h:'', e:0},
+  {h:'<span class="k">import</span> android.os.<span class="t">Bundle</span>', e:0},
+  {h:'<span class="k">import</span> androidx.activity.<span class="t">ComponentActivity</span>', e:0},
+  {h:'<span class="k">import</span> androidx.activity.compose.<span class="f">setContent</span>', e:0},
+  {h:'', e:0},
+  {h:'<span class="k">class</span> <span class="t">MainActivity</span> : <span class="t">ComponentActivity</span>() {', e:0},
+  {h:'    <span class="k">override fun</span> <span class="f">onCreate</span>(savedInstanceState: <span class="t">Bundle</span>?) {', e:0},
+  {h:'        <span class="f">super</span>.<span class="f">onCreate</span>(savedInstanceState)', e:0},
+  {h:'        <span class="f">setContent</span> {', e:0},
+  {h:'            <span class="f">ClosecodeTheme</span> {', e:1,
+   pill:{msg:"Unresolved reference 'ClosecodeTheme'", code:'E0101'}},
+  {h:'                <span class="f">Text</span>(<span class="s">"Hello, world"</span>)', e:1,
+   pill:{msg:"Unresolved reference 'Text'", code:'E0101', badge:2}},
+  {h:'            }', e:0},
+  {h:'        }', e:0},
+  {h:'    }', e:0},
+  {h:'}', e:0},
+  {h:'<span class="c">// filesDir jd</span>', e:0},
+  {h:'<span class="c">// fun fun good takeIfoo</span>', e:0}
+];
+
+function renderRows(){
+  const el = document.getElementById('rows');
+  el.innerHTML = SRC.map((r,i)=>{
+    const pill = r.pill ? `
+      <span class="pillwrap pill-cover">
+        <span class="pill">⊗ ${r.pill.msg}
+          ${r.pill.badge?`<span class="badge">⊕ ${r.pill.badge}</span>`:''}
+          <span class="code">${r.pill.code}</span></span>
+      </span>` : '';
+    const pillInline = r.pill ? `
+      <span class="pill pill-inline">⊗ ${r.pill.msg}
+        ${r.pill.badge?`<span class="badge">⊕ ${r.pill.badge}</span>`:''}
+        <span class="code">${r.pill.code}</span></span>` : '';
+    return `<div class="row ${r.e?'err':''}">
+      <span class="num">${i+1}</span>
+      <span class="src">${r.h}${pillInline}${pill}</span>
+    </div>`;
+  }).join('');
+}
+renderRows();
+
+/* ============ before / after ============ */
+function toggleBefore(){
+  const s = document.getElementById('screen');
+  const on = s.classList.toggle('before');
+  document.getElementById('baBtn').textContent = on ? 'Back to the fix' : 'Show the bug (before)';
+  document.getElementById('baBtn').classList.toggle('on', on);
+}
+
+/* ============ modes ============ */
+let mode = 'code';
+function setMode(m){
+  mode = m;
+  document.getElementById('mCode').classList.toggle('on', m==='code');
+  document.getElementById('mBlocks').classList.toggle('on', m==='blocks');
+  document.getElementById('mPrev').classList.toggle('on', m==='preview');
+  document.getElementById('codeView').style.display = (m==='code')?'block':'none';
+  document.getElementById('blocksView').classList.toggle('on', m==='blocks');
+  document.getElementById('prevView').classList.toggle('on', m==='preview');
+  document.getElementById('bulb').style.display = (m==='code')?'grid':'none';
+  document.getElementById('addBlockBtn')?.classList.toggle('on', m==='blocks');
+  bumpToolRow();
+}
+
+let currentFile = 'MainActivity.kt';
+function openFile(name){
+  currentFile = name;
+  document.getElementById('crumb').textContent = name.replace(/\.[^.]+$/,'');
+  document.querySelectorAll('.ftab').forEach(t=>{
+    t.classList.toggle('sel', t.textContent.includes(name));
+  });
+  const ext = name.split('.').pop().toLowerCase();
+  const previewable = ['html','css','js','png','jpg','jpeg','webp','gif','bmp'].includes(ext);
+  document.getElementById('mPrev').classList.toggle('hide', !previewable);
+  if(!previewable && mode==='preview') setMode('code');
+  renderPreview(name);
+  bumpToolRow();
+}
+
+/* ============ preview ============ */
+function renderPreview(name){
+  const ext = name.split('.').pop().toLowerCase();
+  const body = document.getElementById('prevBody');
+  if(ext==='html'||ext==='css'||ext==='js'){
+    body.innerHTML = `
+      <div class="hosturl">http://127.0.0.1:8787/${name} &nbsp;·&nbsp; served by PreviewServer</div>
+      <div class="webframe" style="display:grid;place-items:center;color:#333;font-weight:700;background:#fff">
+        Live web preview in a WebView
+      </div>
+      <div class="previewnote"><b>Unchanged.</b> Websites keep loading through your local host server — exactly
+      the behaviour you asked me not to touch.</div>`;
+  } else if(['png','jpg','jpeg','webp','gif','bmp'].includes(ext)){
+    body.innerHTML = `<div class="checker"><div class="robot">🤖</div></div>
+      <div class="previewnote">Image preview on a transparency checkerboard — unchanged.</div>`;
+  } else {
+    body.innerHTML = `<div class="phonemock">
+        <div class="pm-hd">Hello, world booss</div>
+        <div class="pm-bd">MainActivity reads your <b>Text(…)</b> and <b>Button(…)</b> labels and renders this
+        static phone mock. It is a preview aid, not a compiler.</div>
+        <button class="pm-btn">Click me</button>
+      </div>
+      <div class="previewnote"><b>Unchanged.</b> The phone mock stays exactly as it is today.</div>`;
+  }
+}
+renderPreview('MainActivity.kt');
+
+/* ============ panel ============ */
+let panelOpen = false;
+function togglePanel(){
+  panelOpen = !panelOpen;
+  document.getElementById('panel').classList.toggle('on', panelOpen);
+  document.getElementById('scrim').classList.toggle('on', panelOpen);
+  document.getElementById('chevBtn').classList.toggle('open', panelOpen);
+  bumpToolRow();
+}
+function setPanelTab(t){
+  const files = t==='files';
+  document.getElementById('tabFiles').classList.toggle('on', files);
+  document.getElementById('tabGit').classList.toggle('on', !files);
+  document.getElementById('filesBody').style.display = files?'block':'none';
+  document.getElementById('gitBody').style.display = files?'none':'block';
+  bumpToolRow();
+}
+function ghState(s){
+  ['empty','repo','menu','publish'].forEach(k=>{
+    document.getElementById('gh'+k[0].toUpperCase()+k.slice(1)).style.display='none';
+  });
+  const id = 'gh'+s[0].toUpperCase()+s.slice(1);
+  document.getElementById(id).style.display='block';
+}
+(function fillRows(){
+  const files = ['.gitignore','module.toml','proguard-rules.pro','AndroidManifest.xml','MainActivity.java',
+    'ic_launcher_background.xml','activity_main.xml','ic_launcher.xml','ic_launcher_round.xml','README.md','Theme.kt','index.html'];
+  document.getElementById('ghRows').innerHTML = files.map(f=>`
+    <div class="ghrow"><span class="st">U</span>
+      <span class="grow"><div class="nm">${f}</div><div class="pth">app/src/main</div></span>
+      <button class="act" onclick="toast('Staged')">＋</button>
+      <button class="act" onclick="toast('View changes · File history · Stage · Discard')">⋯</button>
+    </div>`).join('');
+})();
+
+function tog(row){
+  const kids = row.parentElement.querySelector(':scope > .folder-children');
+  if(!kids) return;
+  const closed = kids.classList.toggle('closed');
+  row.querySelector('.gl').textContent = closed?'▸':'▾';
+}
+
+/* ============ sheets ============ */
+let sheetOpen = null;
+function openSheet(which){
+  if(sheetOpen===which){ closeSheets(); return; }
+  closeSheets();
+  sheetOpen = which;
+  document.getElementById(which==='search'?'sheetSearch':'sheetMore').classList.add('on');
+  document.getElementById('scrim').classList.add('on');
+  document.getElementById(which==='search'?'navSearch':'navMore').classList.add('on');
+  if(which==='search'){ runSearch(''); setTimeout(()=>document.getElementById('q').focus(),260); }
+  bumpToolRow();
+}
+function closeSheets(){
+  document.getElementById('sheetSearch').classList.remove('on');
+  document.getElementById('sheetMore').classList.remove('on');
+  document.getElementById('navSearch').classList.remove('on');
+  document.getElementById('navMore').classList.remove('on');
+  if(!panelOpen && !aiOn && !fullOn) document.getElementById('scrim').classList.remove('on');
+  sheetOpen = null;
+}
+const FILES = {
+  'MainActivity.kt': ['package com.closecode.blankapp','class MainActivity : ComponentActivity()','Text("Hello, world")'],
+  'Theme.kt': ['fun ClosecodeTheme(content: @Composable () -> Unit)','import androidx.compose.runtime.Composable'],
+  'index.html': ['<html><body>Hello</body></html>','<h1>Welcome</h1>'],
+  'strings.xml': ['<resources>','<string name="app_name">Blank app</string>']
+};
+function runSearch(q){
+  const box = document.getElementById('searchRes');
+  const term = (q||'').trim().toLowerCase();
+  if(!term){ box.innerHTML = `<div class="note" style="padding:14px 16px">Type to search every file in the project.</div>`; return; }
+  let html='', hits=0;
+  for(const [f,lines] of Object.entries(FILES)){
+    lines.forEach(l=>{
+      if(l.toLowerCase().includes(term)){ hits++;
+        const i = l.toLowerCase().indexOf(term);
+        const shown = l.slice(0,i)+'<mark>'+l.slice(i,i+term.length)+'</mark>'+l.slice(i+term.length);
+        html += `<div class="sres"><span class="fn">${f}</span><span class="ln2">${shown}</span></div>`;
+      }
+    });
+  }
+  box.innerHTML = hits ? html : `<div class="note" style="padding:14px 16px">No matches.</div>`;
+}
+
+/* ============ AI ============ */
+let aiOn = false;
+function openAI(){
+  aiOn = !aiOn;
+  document.getElementById('aiPanel').classList.toggle('on', aiOn);
+  document.getElementById('navAI').classList.toggle('on', aiOn);
+  document.getElementById('scrim').classList.toggle('on', aiOn || panelOpen || sheetOpen);
+  bumpToolRow();
+}
+
+/* ============ full screen from More ============ */
+let fullOn=false;
+function openFull(which){
+  closeSheets();
+  fullOn=true;
+  document.getElementById('fvTitle').textContent = which;
+  document.getElementById('fvBody').innerHTML = which==='Logcat'
+    ? `<div class="lrow i">11:08:01.204 I/Closecode: Project opened — 12 files</div>
+       <div class="lrow d">11:08:02.771 D/Editor: Opened MainActivity.kt</div>
+       <div class="lrow i">11:08:04.118 I/Save: MainActivity.kt written (412 bytes in 3 ms)</div>
+       <div class="lrow i">11:08:05.640 I/Analysis: 12 files checked in 41 ms</div>
+       <div class="lrow e">11:08:05.641 E/Analysis: 2 errors, 0 warnings</div>
+       <div class="note">Simulated output — this app has no access to the device logcat.</div>`
+    : `<div class="trow2"><span>preBuild</span><span style="color:var(--ok)">✓ 4 ms</span></div>
+       <div class="trow2"><span>compileDebugKotlin</span><span style="color:var(--ok)">✓ 38 ms</span></div>
+       <div class="trow2"><span>mergeDebugResources</span><span style="color:var(--ok)">✓ 6 ms</span></div>
+       <div class="trow2"><span>dexBuilderDebug</span><span style="color:var(--mu)">· pending</span></div>
+       <div class="note">Simulated build — the app does not run Gradle. <b>Untouched by this plan.</b></div>`;
+  document.getElementById('fullView').classList.add('on');
+  bumpToolRow();
+}
+
+/* ============ tool row idle ============ */
+let idleTimer=null;
+function bumpToolRow(){
+  const row = document.getElementById('toolRow');
+  row.classList.remove('idle');
+  clearTimeout(idleTimer);
+  idleTimer = setTimeout(()=>row.classList.add('idle'), 3500);
+}
+['click','keydown','input'].forEach(ev=>
+  document.getElementById('content').addEventListener(ev, bumpToolRow, {passive:true}));
+setTimeout(()=>document.getElementById('toolRow').classList.add('idle'), 4000);
+
+/* ============ back button ============ */
+function androidBack(){
+  if(fullOn){ fullOn=false; document.getElementById('fullView').classList.remove('on'); return; }
+  if(sheetOpen){ closeSheets(); return; }
+  if(aiOn){ openAI(); return; }
+  if(panelOpen){ togglePanel(); return; }
+  if(mode!=='code'){ setMode('code'); return; }
+}
+
+/* ============ blocks drag & drop ============ */
+let dragged=null;
+document.addEventListener('dragstart', e=>{
+  const b = e.target.closest?.('.blk'); if(!b) return;
+  dragged=b; b.classList.add('dragging');
+});
+document.addEventListener('dragend', e=>{ dragged?.classList.remove('dragging'); dragged=null;
+  document.querySelectorAll('.blk').forEach(b=>b.classList.remove('over')); });
+document.addEventListener('dragover', e=>{
+  const b = e.target.closest?.('.blk'); if(!b||b===dragged) return;
+  e.preventDefault(); b.classList.add('over');
+});
+document.addEventListener('dragleave', e=>{ e.target.closest?.('.blk')?.classList.remove('over'); });
+document.addEventListener('drop', e=>{
+  const b = e.target.closest?.('.blk'); if(!b||!dragged||b===dragged) return;
+  e.preventDefault(); b.classList.remove('over');
+  const host = b.parentElement;
+  const kids = [...host.children].filter(n=>n.classList.contains('blk'));
+  if(kids.indexOf(dragged) < kids.indexOf(b)) b.after(dragged); else b.before(dragged);
+  toast('Reordered — source updated, text editor synced');
+});
+function addBlock(){ toast('Add block — picker of available statements'); }
+
+/* ============ toast ============ */
+let tTimer=null;
+function toast(msg){
+  const t=document.getElementById('toast'); t.textContent=msg; t.style.opacity=1;
+  clearTimeout(tTimer); tTimer=setTimeout(()=>t.style.opacity=0,1700);
+}
+
+function resetAll(){
+  if(panelOpen) togglePanel();
+  if(aiOn) openAndroidBackReset();
+  closeSheets();
+  if(fullOn) androidBack();
+  setMode('code');
+  openFile('MainActivity.kt');
+  if(document.getElementById('screen').classList.contains('before')) toggleBefore();
+  document.getElementById('toolRow').classList.remove('idle');
+  toast('Reset');
+}
+function openAndroidBackReset(){ aiOn=false; document.getElementById('aiPanel').classList.remove('on');
+  document.getElementById('navAI').classList.remove('on'); document.getElementById('scrim').classList.remove('on'); }
+
+/* keyboard shortcut: b toggles before/after for quick review */
+document.addEventListener('keydown', e=>{
+  if(e.target.tagName==='INPUT') return;
+  if(e.key==='b'||e.key==='B') toggleBefore();
+});
+</script>
+</body>
+</html>

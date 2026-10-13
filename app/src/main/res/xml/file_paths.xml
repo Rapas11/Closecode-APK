@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  What Closecode is allowed to hand to another app through a content:// URI.
+  Only the projects folder: the app's private storage is readable by nobody else, so the share
+  sheet can only ever offer files the reader chose to put in a project.
+-->
+<paths>
+    <files-path name="projects" path="projects/" />
+</paths>

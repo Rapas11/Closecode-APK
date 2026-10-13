@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Closecode editor — new layout mockup</title>
+<style>
+  /* Colours copied from the app's own dark theme (ui/theme/Color.kt). */
+  :root{
+    --bg:#0B0F16; --panel:#131923; --panel2:#1A2230; --ln:#263043;
+    --tx:#E7ECF5; --mu:#8B98B0; --ac:#7B9BFF; --sel:#1C2A52; --editor:#0F141D;
+    --red:#FF6B81; --amber:#F0B429; --success:#3ECF9B; --purple:#5B3FD1;
+    --kw:#B794FF; --str:#6FE0B0; --com:#5D6A82; --fn:#7FB2FF;
+    --num:#FFA86B; --anno:#F5C26B; --type:#E5C07B; --bulb:#F5DC8A;
+    --guide:rgba(231,236,245,.15);
+    --monospace: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:#070A10;color:var(--tx);font-family:var(--sans);padding:30px 16px 70px}
+
+  h1{font-size:20px;margin:0 0 6px;letter-spacing:-.2px}
+  .sub{color:var(--mu);font-size:13px;margin:0 0 26px;max-width:640px;line-height:1.5}
+
+  .state{margin:0 0 34px}
+  .state h2{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--mu);margin:0 0 9px;font-weight:600}
+
+  /* ---- phone frame ---- */
+  .frame{width:430px;border:1px solid var(--ln);border-radius:16px;background:var(--bg);overflow:hidden}
+
+  /* ---- header: hamburger + project name + actions ---- */
+  .topbar{display:flex;align-items:center;gap:8px;padding:9px 10px;background:var(--panel);border-bottom:1px solid var(--ln)}
+  .ic{width:30px;height:30px;border-radius:8px;display:flex;align-items:center;justify-content:center;color:var(--tx);flex:none}
+  .ic:hover{background:var(--panel2)}
+  .hamb{font-size:17px;letter-spacing:-1px;color:var(--tx);padding:0 4px}
+  .proj{font-size:15px;font-weight:700;letter-spacing:-.2px;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .run{background:#2457FF;color:#fff;border-radius:9px;width:34px;height:32px;display:flex;align-items:center;justify-content:center}
+
+  /* ---- breadcrumb line: path left, view icons right ---- */
+  .crumb{display:flex;align-items:center;gap:8px;padding:7px 10px;background:var(--panel2);border-bottom:1px solid var(--ln)}
+  .path{font-family:var(--monospace);font-size:11.5px;color:var(--mu);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .path b{color:var(--tx);font-weight:500}
+  .vbtn{display:flex;align-items:center;gap:5px;padding:5px 9px;border-radius:7px;font-size:11px;color:var(--mu);border:1px solid transparent}
+  .vbtn.on{background:var(--ac);color:#0B0F16;font-weight:600;border-color:var(--ac)}
+
+  /* ---- file tabs, fading at the right edge ---- */
+  .tabs{position:relative;display:flex;align-items:stretch;height:40px;background:var(--bg);border-bottom:1px solid var(--ln)}
+  .tabs .scroll{display:flex;align-items:stretch;gap:6px;padding:0 10px;overflow:hidden;flex:1}
+  .tab{display:flex;align-items:center;gap:6px;padding:0 4px;font-size:12.5px;color:var(--mu);border-bottom:2px solid transparent;white-space:nowrap}
+  .tab.on{color:var(--tx);border-bottom-color:var(--ac)}
+  .dot{width:6px;height:6px;border-radius:50%;background:var(--red)}
+  .fade{position:absolute;right:0;top:0;bottom:0;width:54px;pointer-events:none;
+        background:linear-gradient(90deg, rgba(11,15,22,0), rgba(11,15,22,.96))}
+
+  /* ---- code area ---- */
+  .codewrap{position:relative;background:var(--editor)}
+  .sticky{display:flex;align-items:center;gap:7px;height:26px;padding:0 10px 0 104px;background:var(--panel2);
+          border-bottom:1px solid var(--ln);font-family:var(--monospace);font-size:11px;color:var(--mu)}
+  .code{position:relative;padding:6px 0 10px}
+  .row{position:relative;display:flex;height:22px}
+  .gutter{position:relative;width:104px;flex:none}
+
+  /* left edge: git change bar, then diagnostic bar, then lightbulb slot */
+  .gitbar{position:absolute;top:2px;bottom:2px;width:4px;border-radius:2px}
+  .diagbar{position:absolute;top:3px;bottom:3px;width:3px;border-radius:2px}
+  .bulbslot{position:absolute;left:13px;top:3px;width:18px;height:16px;border-radius:5px;
+            background:#1F1F26;border:1px solid #9C9CAB;display:flex;align-items:center;justify-content:center}
+  .bulbslot svg{width:10px;height:10px}
+  .num{position:absolute;right:34px;top:0;height:22px;line-height:22px;font-family:var(--monospace);
+       font-size:11.5px;color:var(--com);opacity:.75}
+  .num.caret{opacity:1}
+  .num.err{color:var(--red);font-weight:700;opacity:1}
+  .chev{position:absolute;left:74px;top:0;height:22px;line-height:22px;font-size:9px;color:var(--mu)}
+
+  .txt{position:relative;flex:1;font-family:var(--monospace);font-size:12px;line-height:22px;white-space:pre;min-width:0}
+  .guide{position:absolute;top:0;bottom:0;width:1px;background:var(--guide)}
+  .guide.on{background:var(--amber);width:1.5px}
+  .bline{position:absolute;height:2px;width:8px;background:var(--ac);border-radius:1px}
+  .curline{position:absolute;left:104px;right:0;top:0;height:22px;background:rgba(123,155,255,.07)}
+  .caret{position:absolute;width:2px;height:16px;background:var(--ac);top:3px;border-radius:1px}
+  .sq{text-decoration:underline wavy var(--red);text-decoration-thickness:1.5px;text-underline-offset:3px}
+  .sel{background:var(--ac);color:#0B0F16;border-radius:3px}
+  .handle{position:absolute;width:9px;height:9px;background:#3B82F6;border-radius:50%;top:7px}
+
+  .kw{color:var(--kw)} .str{color:var(--str)} .com{color:var(--com)} .fn{color:var(--fn)}
+  .numc{color:var(--num)} .anno{color:var(--anno)} .ty{color:var(--type)} .pl{color:var(--tx)}
+
+  /* ---- signature help, above the line ---- */
+  .sig{position:absolute;left:112px;right:14px;top:-6px;background:var(--panel2);
+       border:1px solid var(--ln);border-radius:10px;padding:9px 11px;box-shadow:0 8px 22px rgba(0,0,0,.5);z-index:6}
+  .sig .s1{font-family:var(--monospace);font-size:11.5px;color:var(--mu)}
+  .sig .s1 b{background:#31456F;color:var(--tx);border-radius:4px;padding:1px 4px;font-weight:600}
+  .sig .s2{font-size:11px;color:var(--mu);margin-top:5px}
+
+  /* ---- 4-row suggestion popup, below the line ---- */
+  .pop{position:absolute;left:150px;right:14px;top:6px;background:var(--panel2);
+       border:1px solid var(--ln);border-radius:10px;overflow:hidden;box-shadow:0 10px 26px rgba(0,0,0,.55);z-index:5}
+  .prow{display:flex;align-items:center;gap:9px;padding:7px 10px;border-bottom:1px solid rgba(38,48,67,.55)}
+  .prow:last-child{border-bottom:0}
+  .prow.on{background:#31257A}
+  .badge{width:22px;height:22px;border-radius:6px;display:flex;align-items:center;justify-content:center;
+         font-size:11px;font-weight:700;color:#fff;flex:none}
+  .pmain{flex:1;min-width:0}
+  .pname{font-family:var(--monospace);font-size:12px;color:var(--tx)}
+  .ppkg{font-size:10px;color:var(--mu);margin-top:1px}
+  .ptype{font-family:var(--monospace);font-size:11px;color:var(--mu);flex:none}
+
+  /* ---- error pill, kept exactly as it is ---- */
+  .pill{position:absolute;left:296px;top:2px;height:18px;display:flex;align-items:center;gap:4px;
+        background:#4A2A31;color:#FFB4BD;border:1px solid rgba(255,107,129,.35);border-radius:8px;
+        padding:0 7px;font-size:10.5px;white-space:nowrap;z-index:4}
+
+  /* ---- selection toolbar ---- */
+  .selbar{position:absolute;left:150px;right:20px;top:-52px;display:flex;background:var(--panel2);
+          border:1px solid var(--ln);border-radius:9px;overflow:hidden;box-shadow:0 8px 20px rgba(0,0,0,.5);z-index:7}
+  .selbar div{padding:9px 12px;font-size:12px;color:var(--tx);border-right:1px solid var(--ln)}
+  .selbar div:last-child{border-right:0}
+  .selbar .fmt{color:#7FA8FF;font-weight:600}
+
+  /* ---- scrollbar with error ticks ---- */
+  .sbar{position:absolute;right:3px;top:8px;bottom:8px;width:6px;border-radius:3px;background:rgba(231,236,245,.3)}
+  .thumb{position:absolute;left:0;width:6px;height:64px;border-radius:3px;background:rgba(231,236,245,.3)}
+  .tick{position:absolute;left:0;width:6px;height:3px;border-radius:2px;background:var(--red)}
+
+  /* ---- symbol bar + bottom nav ---- */
+  .sym{display:flex;gap:7px;padding:9px 10px;background:var(--panel);border-top:1px solid var(--ln)}
+  .key{flex:1;height:38px;border-radius:9px;background:var(--panel2);display:flex;align-items:center;
+       justify-content:center;font-family:var(--monospace);font-size:15px;color:var(--tx)}
+  .key.new{outline:1.5px solid var(--ac);outline-offset:-1.5px}
+  .nav{display:flex;background:var(--panel);border-top:1px solid var(--ln)}
+  .nav div{flex:1;text-align:center;padding:10px 0;font-size:12px;font-weight:600;color:var(--mu)}
+
+  /* ---- decision list ---- */
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:9px;max-width:1000px;margin-top:6px}
+  .d{background:var(--panel);border:1px solid var(--ln);border-radius:10px;padding:11px 13px;font-size:12.5px;line-height:1.45}
+  .d b{display:block;color:var(--ac);font-size:11px;letter-spacing:.05em;text-transform:uppercase;margin-bottom:4px}
+  .new:after{content:" new";color:var(--success);font-size:10px;letter-spacing:.08em;text-transform:uppercase}
+</style>
+</head>
+<body>
+
+<h1>Closecode — the new editor</h1>
+<p class="sub">Everything we agreed, drawn to the app's real colours. Two states, like your picture.
+Colours left of the code: <b style="color:#3ECF9B">green</b> added line, <b style="color:#7B9BFF">blue</b> changed line,
+<b style="color:#FF6B81">red</b> error. Nothing has been built yet — this is only the drawing.</p>
+
+<!-- ============ STATE A : TYPING ============ -->
+<div class="state">
+  <h2>State A — typing</h2>
+  <div class="frame">
+    <div class="topbar">
+      <div class="ic hamb" title="Opens the file drawer">&#9776;</div>
+      <div class="proj">blankapp</div>
+      <div class="ic" title="Save"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#E7ECF5" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8M7 3v5h8"/></svg></div>
+      <div class="ic" title="Undo"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#E7ECF5" stroke-width="2" stroke-linecap="round"><path d="M3 7v6h6"/><path d="M3.5 13a9 9 0 1 0 2.1-6.4L3 9"/></svg></div>
+      <div class="ic" title="Redo" style="opacity:.35"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#E7ECF5" stroke-width="2" stroke-linecap="round"><path d="M21 7v6h-6"/><path d="M20.5 13a9 9 0 1 1-2.1-6.4L21 9"/></svg></div>
+      <div class="ic run" title="Run"><svg width="16" height="16" viewBox="0 0 24 24" fill="#fff"><path d="M7 4l13 8-13 8z"/></svg></div>
+      <div class="ic" title="More — Terminal lives in here"><svg width="16" height="16" viewBox="0 0 24 24" fill="#E7ECF5"><circle cx="12" cy="5" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="12" cy="19" r="1.8"/></svg></div>
+    </div>
+
+    <div class="crumb">
+      <div class="path">blankapp › <b>MainActivity.kt</b></div>
+      <div class="vbtn on">Code</div>
+      <div class="vbtn">Blocks</div>
+      <div class="vbtn">Preview</div>
+    </div>
+
+    <div class="tabs">
+      <div class="scroll">
+        <div class="tab on"><span class="dot"></span>MainActivity.kt</div>
+        <div class="tab">Theme.kt</div>
+        <div class="tab">build.gradle.kts</div>
+        <div class="tab">README.md</div>
+      </div>
+      <div class="fade"></div>
+    </div>
+
+    <div class="codewrap">
+      <div class="code" style="height:392px">
+
+        <div class="row"><div class="gutter"><span class="num">1</span></div>
+          <div class="txt"><span class="kw">package</span> com.example.app</div></div>
+
+        <div class="row"><div class="gutter"></div><div class="txt"></div></div>
+
+        <div class="row"><div class="gutter"><span class="num">3</span><span class="chev">&#9656;</span></div>
+          <div class="txt"><span class="guide" style="left:36px"></span><span class="kw">import</span> android.os.Bundle</div></div>
+
+        <div class="row"><div class="gutter"><span class="num">4</span></div>
+          <div class="txt"><span class="guide" style="left:36px"></span><span class="kw">import</span> androidx.activity.Component</div></div>
+
+        <div class="row"><div class="gutter"><span class="num">5</span></div>
+          <div class="txt"><span class="guide" style="left:36px"></span><span class="kw">import</span> androidx.compose.Window</div></div>
+
+        <div class="row"><div class="gutter"></div><div class="txt"></div></div>
+
+        <div class="row"><div class="gutter"><span class="num">7</span><span class="chev">&#9662;</span></div>
+          <div class="txt"><span class="kw">class</span> <span class="ty">MainActivity</span> : Component() {</div></div>
+
+        <div class="row"><div class="gutter"><span class="num">8</span><span class="chev">&#9662;</span></div>
+          <div class="txt"><span class="guide" style="left:36px"></span>    <span class="kw">override fun</span> <span class="fn">onCreate</span>(<span class="ty">state</span>: Bundle) {</div></div>
+
+        <!-- caret line 9 -->
+        <div class="row">
+          <div class="curline"></div>
+          <div class="gutter">
+            <span class="gitbar" style="left:0;background:#7B9BFF"></span>
+            <span class="diagbar" style="left:6px;background:var(--red)"></span>
+            <span class="bulbslot" title="Quick fixes"><svg viewBox="0 0 24 24" fill="#F5DC8A"><path d="M12 2a7 7 0 0 0-4 12.7V17a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1v-2.3A7 7 0 0 0 12 2z"/><rect x="9" y="20" width="6" height="2" rx="1"/></svg></span>
+            <span class="num err caret">9</span>
+          </div>
+          <div class="txt">
+            <span class="guide" style="left:72px"></span>
+            8 spaces →        super.<span class="fn">onCreate</span>(<span class="ty sq">stat</span>)
+            <span class="caret" style="left:225px"></span>
+          </div>
+        </div>
+
+        <div class="row"><div class="gutter"><span class="num">10</span><span class="chev">&#9662;</span></div>
+          <div class="txt"><span class="guide" style="left:36px"></span><span class="guide" style="left:72px"></span>    setContent {</div></div>
+
+        <div class="row"><div class="gutter"><span class="num">11</span><span class="chev">&#9662;</span></div>
+          <div class="txt"><span class="guide" style="left:36px"></span><span class="guide" style="left:72px"></span><span class="guide" style="left:108px"></span>        AppTheme {</div></div>
+
+        <div class="row"><div class="gutter"><span class="num">12</span></div>
+          <div class="txt"><span class="guide" style="left:36px"></span><span class="guide" style="left:72px"></span><span class="guide" style="left:108px"></span>            Text(<span class="str">"Hello"</span>)</div></div>
+
+        <div class="row"><div class="gutter"><span class="num">13</span></div>
+          <div class="txt"><span class="guide" style="left:36px"></span><span class="guide" style="left:72px"></span><span class="guide" style="left:108px"></span>        }</div></div>
+
+        <div class="row"><div class="gutter"><span class="num">14</span></div>
+          <div class="txt"><span class="guide" style="left:36px"></span><span class="guide" style="left:72px"></span>    }</div></div>
+
+        <div class="row"><div class="gutter"><span class="num">15</span></div>
+          <div class="txt"><span class="guide" style="left:36px"></span><span class="guide on" style="left:72px"></span>}</div></div>
+
+        <div class="row"><div class="gutter"><span class="num">16</span></div>
+          <div class="txt">}</div></div>
+
+        <!-- signature help above line 9, suggestions below it -->
+        <div class="sig">
+          <div class="s1">onCreate(<b>state</b>: Bundle)</div>
+          <div class="s2">Saved state to restore the activity.</div>
+        </div>
+        <div class="pill">Unresolved &#8216;stat&#8217;</div>
+        <div class="pop">
+          <div class="prow on"><span class="badge" style="background:#5B3FD1">P</span>
+            <span class="pmain"><span class="pname">stat</span><span class="ppkg">android.util.Log</span></span>
+            <span class="ptype">Float</span></div>
+          <div class="prow"><span class="badge" style="background:#5B3FD1">P</span>
+            <span class="pmain"><span class="pname">state</span><span class="ppkg">android.os.Bundle</span></span>
+            <span class="ptype">Bundle</span></div>
+          <div class="prow"><span class="badge" style="background:#2E9E6B">F</span>
+            <span class="pmain"><span class="pname">static</span><span class="ppkg">java.lang.Math</span></span>
+            <span class="ptype">Unit</span></div>
+          <div class="prow"><span class="badge" style="background:#5B3FD1">P</span>
+            <span class="pmain"><span class="pname">statistic</span><span class="ppkg">android.content.res.Statistics</span></span>
+            <span class="ptype">Statistics</span></div>
+        </div>
+
+        <div class="sbar"><div class="tick" style="top:74px"></div><div class="thumb" style="top:18px"></div></div>
+      </div>
+    </div>
+
+    <div class="sym">
+      <div class="key">&#9656;&#124;</div><div class="key">{</div><div class="key">}</div><div class="key">(</div>
+      <div class="key">)</div><div class="key">;</div>
+      <div class="key new">&quot;</div><div class="key new">&lt;</div><div class="key new">&gt;</div>
+    </div>
+    <div class="nav"><div>Search</div><div>AI</div><div>More</div></div>
+  </div>
+</div>
+
+<!-- ============ STATE B : SELECTING ============ -->
+<div class="state">
+  <h2>State B — selecting</h2>
+  <div class="frame">
+    <div class="topbar">
+      <div class="ic hamb">&#9776;</div>
+      <div class="proj">blankapp</div>
+      <div class="ic"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#E7ECF5" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8M7 3v5h8"/></svg></div>
+      <div class="ic" style="opacity:.35"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#E7ECF5" stroke-width="2" stroke-linecap="round"><path d="M3 7v6h6"/><path d="M3.5 13a9 9 0 1 0 2.1-6.4L3 9"/></svg></div>
+      <div class="ic" style="opacity:.35"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#E7ECF5" stroke-width="2" stroke-linecap="round"><path d="M21 7v6h-6"/><path d="M20.5 13a9 9 0 1 1-2.1-6.4L21 9"/></svg></div>
+      <div class="ic run"><svg width="16" height="16" viewBox="0 0 24 24" fill="#fff"><path d="M7 4l13 8-13 8z"/></svg></div>
+      <div class="ic"><svg width="16" height="16" viewBox="0 0 24 24" fill="#E7ECF5"><circle cx="12" cy="5" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="12" cy="19" r="1.8"/></svg></div>
+    </div>
+
+    <div class="crumb">
+      <div class="path">blankapp › <b>MainActivity.kt</b></div>
+      <div class="vbtn on">Code</div><div class="vbtn">Blocks</div><div class="vbtn">Preview</div>
+    </div>
+
+    <div class="tabs">
+      <div class="scroll">
+        <div class="tab on"><span class="dot"></span>MainActivity.kt</div>
+        <div class="tab">Theme.kt</div>
+        <div class="tab">build.gradle.kts</div>
+        <div class="tab">README.md</div>
+      </div>
+      <div class="fade"></div>
+    </div>
+
+    <div class="codewrap">
+      <div class="sticky">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#7B9BFF" stroke-width="2"><path d="M4 6h16M4 12h10M4 18h13"/></svg>
+        override fun onCreate(state: Bundle)
+      </div>
+      <div class="code" style="height:366px">
+
+        <div class="row"><div class="gutter"><span class="num">1</span></div>
+          <div class="txt"><span class="kw">package</span> com.example.app</div></div>
+        <div class="row"><div class="gutter"></div><div class="txt"></div></div>
+        <div class="row"><div class="gutter"><span class="num">3</span><span class="chev">&#9656;</span></div>
+          <div class="txt"><span class="guide" style="left:36px"></span><span class="kw">import</span> android.os.Bundle</div></div>
+        <div class="row"><div class="gutter"><span class="num">4</span></div>
+          <div class="txt"><span class="guide" style="left:36px"></span><span class="kw">import</span> androidx.activity.Component</div></div>
+        <div class="row"><div class="gutter"><span class="num">5</span></div>
+          <div class="txt"><span class="guide" style="left:36px"></span><span class="kw">import</span> androidx.compose.Window</div></div>
+
+        <div class="row">
+          <div class="gutter">
+            <span class="gitbar" style="left:0;background:#3ECF9B"></span>
+            <span class="num">7</span><span class="chev">&#9662;</span>
+          </div>
+          <div class="txt"><span class="kw">class</span> <span class="ty">MainActivity</span> : Component() {</div>
+        </div>
+
+        <!-- active pair: onCreate. thin line under { here -->
+        <div class="row">
+          <div class="gutter"><span class="num caret">8</span><span class="chev">&#9662;</span></div>
+          <div class="txt"><span class="guide" style="left:36px"></span>    <span class="kw">override fun</span> <span class="fn sel">onCreate</span>(state: Bundle) {<span class="bline" style="left:222px;bottom:1px"></span></div>
+          <span class="handle" style="left:186px"></span><span class="handle" style="left:217px"></span>
+        </div>
+
+        <div class="row"><div class="gutter"><span class="num">9</span></div>
+          <div class="txt"><span class="guide" style="left:36px"></span><span class="guide on" style="left:72px"></span>        super.onCreate(state)</div></div>
+
+        <div class="row"><div class="gutter"><span class="num">10</span><span class="chev">&#9662;</span></div>
+          <div class="txt"><span class="guide" style="left:36px"></span><span class="guide on" style="left:72px"></span>    setContent {</div></div>
+
+        <div class="row"><div class="gutter"><span class="num">11</span><span class="chev">&#9662;</span></div>
+          <div class="txt"><span class="guide" style="left:36px"></span><span class="guide on" style="left:72px"></span><span class="guide" style="left:108px"></span>        AppTheme {</div></div>
+
+        <div class="row"><div class="gutter"><span class="num">12</span></div>
+          <div class="txt"><span class="guide" style="left:36px"></span><span class="guide on" style="left:72px"></span><span class="guide" style="left:108px"></span>            Text(<span class="str">"Hello"</span>)</div></div>
+
+        <div class="row"><div class="gutter"><span class="num">13</span></div>
+          <div class="txt"><span class="guide" style="left:36px"></span><span class="guide on" style="left:72px"></span><span class="guide" style="left:108px"></span>        }</div></div>
+
+        <div class="row"><div class="gutter"><span class="num">14</span></div>
+          <div class="txt"><span class="guide" style="left:36px"></span><span class="guide on" style="left:72px"></span>    }</div></div>
+
+        <!-- thin line under } here -->
+        <div class="row">
+          <div class="gutter"><span class="num">15</span></div>
+          <div class="txt"><span class="guide" style="left:36px"></span><span class="guide on" style="left:72px"></span>}<span class="bline" style="left:0px;bottom:1px"></span></div>
+        </div>
+
+        <div class="row">
+          <div class="gutter">
+            <span class="gitbar" style="left:0;background:#3ECF9B"></span><span class="num">16</span>
+          </div>
+          <div class="txt">}</div>
+        </div>
+
+        <div class="selbar"><div>Cut</div><div>Copy</div><div>Paste</div><div>Comment</div><div class="fmt">Format</div></div>
+
+        <div class="sbar"><div class="thumb" style="top:14px"></div></div>
+      </div>
+    </div>
+
+    <div class="sym">
+      <div class="key">&#9656;&#124;</div><div class="key">{</div><div class="key">}</div><div class="key">(</div>
+      <div class="key">)</div><div class="key">;</div>
+      <div class="key new">&quot;</div><div class="key new">&lt;</div><div class="key new">&gt;</div>
+    </div>
+    <div class="nav"><div>Search</div><div>AI</div><div>More</div></div>
+  </div>
+</div>
+
+<!-- ============ WHAT WE AGREED ============ -->
+<h1 style="margin-top:40px">What we agreed</h1>
+<p class="sub">21 answers. Tell me which ones look wrong in the drawing above.</p>
+<div class="grid">
+
+  <div class="d new"><b>Top bar</b>&#9776; at the far left. Project name kept. Save, Undo, Redo, Run kept. No search icon.</div>
+  <div class="d new"><b>Terminal</b>Moved out of the top bar into the &#8943; menu, so it is one tap from the top.</div>
+  <div class="d"><b>Breadcrumb line</b>Unchanged. File path on the left, Code / Blocks / Preview on the right.</div>
+  <div class="d new"><b>Suggestions</b>4 items instead of 5. Each row: name on the left, type on the right, package underneath.</div>
+  <div class="d new"><b>Signature help</b>Box above the line, the word you are on is highlighted, one line of description. Unknown words leave the line blank so the box never resizes.</div>
+  <div class="d new"><b>Margin</b>Wider, so the coloured bar and the lightbulb both fit. Costs about 12 dots of code width.</div>
+  <div class="d new"><b>Left margin</b>Green, blue and red bars for changed lines, then the red error bar, then the lightbulb, then the number.</div>
+  <div class="d"><b>Error fix</b>The round dot was landing on top of 3-digit line numbers from line 100 up. Fixed.</div>
+  <div class="d new"><b>Braces</b>A short line <u>under</u> the opening { and under the closing }. The box around them is gone.</div>
+  <div class="d"><b>Side guides</b>Kept faint, and the amber one that lights up the block you are inside stays.</div>
+  <div class="d new"><b>Error pill</b>Untouched. Still at the end of its own line, tap for the full message.</div>
+  <div class="d new"><b>Auto-indent</b>Enter after { moves in by your Indent size. Enter after } comes back out. The } drops to its own line. The switch works on a physical keyboard too.</div>
+  <div class="d new"><b>Symbol row</b>&quot; &lt; &gt; added &#8212; outlined in blue.</div>
+  <div class="d new"><b>Word wrap</b>The switch on the settings screen finally works. The underline, pill and guides now measure the whole logical line so they stay in the right place.</div>
+  <div class="d new"><b>Selection bar</b>Cut Copy Paste Comment Format, in that order. The one Android draws itself no longer appears.</div>
+  <div class="d new"><b>Search</b>Two switches added: match capitalisation, and patterns. Patterns start switched off.</div>
+  <div class="d new"><b>Folding</b>Chevrons down the margin. Tap to collapse any block, and the imports fold as one block. Line 3 shows &#9656;, the open blocks show &#9662;.</div>
+  <div class="d new"><b>HTML</b>Both templates now say your project name, and the page is richer so Preview shows something worth looking at. Plus tag colours, tag help, and a warning on an unclosed tag.</div>
+  <div class="d new"><b>More</b>Tap a word and its other uses light up. Long-press a symbol for its name and type. Scrollbar gets small ticks where the errors are. Rainbow brackets exist but start switched off. The function name pins to the top once its opening line scrolls away.</div>
+  <div class="d new"><b>Coming later</b>Problems / Terminal / Output panel above the bottom bar. Branch name plus changed-line bars. Bottom Search / AI / More bar stays exactly as it is.</div>
+  <div class="d"><b>Not built</b>The Typing / Selecting buttons. They are controls for switching between these two drawings, not a real feature.</div>
+
+</div>
+</body>
+</html>

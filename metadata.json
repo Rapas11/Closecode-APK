@@ -1,0 +1,6 @@
+{
+  "name": "Closecode",
+  "description": "The Android IDE for your phone",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
