@@ -61,7 +61,8 @@ class GitHubRemote(private val root: File) {
                 .setRemote(ORIGIN)
                 .setCredentialsProvider(tokenCredentials(token))
                 .call()
-            val summary = summarise(result.flatMap { it.remoteUpdates })
+            val updates = result.flatMap { it.remoteUpdates }
+            val summary = summarise(updates)
 
             // Record the upstream now that the branch exists on both sides, so a later pull
             // knows which remote branch to take.
@@ -69,6 +70,7 @@ class GitHubRemote(private val root: File) {
             config.setString("branch", branch, "remote", ORIGIN)
             config.setString("branch", branch, "merge", "refs/heads/$branch")
             config.save()
+            updateTrackingRef(git, branch, updates)
             summary
         }
     }
@@ -88,8 +90,15 @@ class GitHubRemote(private val root: File) {
             }
             val failures = result.mergeResult?.let { merge ->
                 if (merge.mergeStatus.isSuccessful) {
-                    if (merge.newHead == null) "Already up to date."
-                    else "Merged ${merge.newHead.name.take(7)}."
+                    when (merge.mergeStatus) {
+                        org.eclipse.jgit.api.MergeResult.MergeStatus.ALREADY_UP_TO_DATE ->
+                            "Already up to date."
+                        org.eclipse.jgit.api.MergeResult.MergeStatus.FAST_FORWARD ->
+                            "Pulled remote changes."
+                        org.eclipse.jgit.api.MergeResult.MergeStatus.MERGED ->
+                            "Merged remote changes."
+                        else -> "Updated from the remote."
+                    }
                 } else {
                     throw GitHubException(
                         "The pull needs a merge this app cannot finish: ${merge.mergeStatus.name}. " +
@@ -103,14 +112,40 @@ class GitHubRemote(private val root: File) {
 
     private fun summarise(updates: List<RemoteRefUpdate>): String {
         if (updates.isEmpty()) return "Nothing to push."
-        val rejected = updates.filter { it.status != RemoteRefUpdate.Status.OK }
+        val rejected = updates.filter {
+            it.status != RemoteRefUpdate.Status.OK &&
+                it.status != RemoteRefUpdate.Status.UP_TO_DATE
+        }
         if (rejected.isNotEmpty()) {
             val detail = rejected.joinToString("; ") { update ->
                 "${update.remoteName}: ${update.message ?: update.status.name}"
             }
             throw GitHubException("Push rejected — $detail")
         }
-        return if (updates.size == 1) "Pushed ${updates.first().remoteName}." else "Pushed ${updates.size} refs."
+        val pushed = updates.filter { it.status == RemoteRefUpdate.Status.OK }
+        if (pushed.isEmpty()) return "Nothing to push."
+        return if (pushed.size == 1) "Pushed ${pushed.first().remoteName}." else "Pushed ${pushed.size} refs."
+    }
+
+    private fun updateTrackingRef(
+        git: Git,
+        branch: String,
+        updates: List<RemoteRefUpdate>,
+    ) {
+        val remoteBranch = "refs/heads/$branch"
+        if (updates.none {
+                it.remoteName == remoteBranch &&
+                    (it.status == RemoteRefUpdate.Status.OK ||
+                        it.status == RemoteRefUpdate.Status.UP_TO_DATE)
+            }
+        ) {
+            return
+        }
+        val head = git.repository.resolve("HEAD") ?: return
+        val update = git.repository.updateRef("refs/remotes/$ORIGIN/$branch")
+        update.setForceUpdate(true)
+        update.setNewObjectId(head)
+        update.update()
     }
 
     private companion object {

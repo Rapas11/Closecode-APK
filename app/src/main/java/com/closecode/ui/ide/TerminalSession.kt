@@ -92,7 +92,7 @@ internal class TerminalSession(val number: Int) {
     /** Output arrived while unfollowed: the Latest pill's blue dot until the reader catches up. */
     var hasNewOutput by mutableStateOf(false)
 
-    private var shell: ShellProcess? = null
+    private var shell: ShellBackend? = null
     // The last measured size. Kept here (not only on the process) so a resize that lands
     // before the shell starts — or while it is dead between commands — is still applied.
     private var pendingCols: Int = 80
@@ -102,10 +102,7 @@ internal class TerminalSession(val number: Int) {
 
     fun start(directory: File?) {
         if (shell != null) return
-        val started = ShellProcess(
-            directory = directory,
-            onLine = { line -> output.trySend(line) },
-        )
+        val started = openShell(directory) { line -> output.trySend(line) }
         started.start()
         started.setSize(pendingCols, pendingRows)
         shell = started

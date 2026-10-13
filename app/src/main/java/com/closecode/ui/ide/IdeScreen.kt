@@ -93,6 +93,7 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
@@ -398,19 +399,123 @@ internal fun IdeScreen(
             com.closecode.build.InstallState.Idle,
         )
     }
+    var installAttemptInFlight by remember(slug) { mutableStateOf(false) }
+    var overlayPromptOpen by remember { mutableStateOf(false) }
+    var pendingBackPackage by remember { mutableStateOf<String?>(null) }
+    var pendingNotificationPackage by remember { mutableStateOf<String?>(null) }
     // A plain stat per composition (microseconds): always fresh after a build without
     // depending on declaration order. The engine will set builtApkPath when packaging
     // lands; until then the conventional output path is probed directly.
     val builtApk: java.io.File? =
         builtApkPath?.let { java.io.File(it) }?.takeIf { it.isFile }
             ?: runCatching { repository.projectDir(slug) }.getOrNull()
-                ?.let { java.io.File(it, "build/closecode/app-debug.apk") }
+                ?.let { java.io.File(it, "build/outputs/apk/debug/app-debug.apk") }
                 ?.takeIf { it.isFile }
+    val installScope = rememberCoroutineScope()
+    val notificationPermissionLauncher =
+        androidx.activity.compose.rememberLauncherForActivityResult(
+            androidx.activity.result.contract.ActivityResultContracts.RequestPermission(),
+        ) { granted ->
+            val packageName = pendingNotificationPackage ?: return@rememberLauncherForActivityResult
+            pendingNotificationPackage = null
+            com.closecode.ui.ide.BackToEditor.openInstalledApp(
+                context,
+                packageName,
+                showNotification = granted,
+            ).onFailure { error ->
+                toast = error.message ?: "Could not open the installed app."
+            }
+        }
+    fun launchWithoutOverlay(packageName: String) {
+        val needsNotificationPermission =
+            android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU &&
+                androidx.core.content.ContextCompat.checkSelfPermission(
+                    context,
+                    android.Manifest.permission.POST_NOTIFICATIONS,
+                ) != android.content.pm.PackageManager.PERMISSION_GRANTED
+        if (needsNotificationPermission) {
+            pendingNotificationPackage = packageName
+            notificationPermissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+        } else {
+            com.closecode.ui.ide.BackToEditor.openInstalledApp(
+                context,
+                packageName,
+                showNotification = true,
+            ).onFailure { error ->
+                toast = error.message ?: "Could not open the installed app."
+            }
+        }
+    }
+    fun openInstalledApp(packageName: String) {
+        if (com.closecode.ui.ide.shouldAskForOverlayPermission(
+                sdk = android.os.Build.VERSION.SDK_INT,
+                canDrawOverlay = android.provider.Settings.canDrawOverlays(context),
+                permissionAskedBefore = kvStore.getInt("back_to_editor_overlay_asked", 0) != 0,
+            )
+        ) {
+            pendingBackPackage = packageName
+            overlayPromptOpen = true
+        } else {
+            com.closecode.ui.ide.BackToEditor.openInstalledApp(
+                context,
+                packageName,
+                showNotification = !android.provider.Settings.canDrawOverlays(context),
+            ).onFailure { error ->
+                toast = error.message ?: "Could not open the installed app."
+            }
+        }
+    }
+    val overlayPermissionLauncher =
+        androidx.activity.compose.rememberLauncherForActivityResult(
+            androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult(),
+        ) {
+            val packageName = pendingBackPackage ?: return@rememberLauncherForActivityResult
+            pendingBackPackage = null
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M &&
+                android.provider.Settings.canDrawOverlays(context)
+            ) {
+                com.closecode.ui.ide.BackToEditor.openInstalledApp(
+                    context,
+                    packageName,
+                    showNotification = false,
+                ).onFailure { error ->
+                    toast = error.message ?: "Could not open the installed app."
+                }
+            } else {
+                launchWithoutOverlay(packageName)
+            }
+        }
+    fun requestApkInstall(apk: java.io.File) {
+        if (installAttemptInFlight || installState is com.closecode.build.InstallState.Installing) return
+        installAttemptInFlight = true
+        installScope.launch {
+            try {
+                when (val result = withContext(Dispatchers.IO) {
+                    com.closecode.build.InstallHelper.install(context, apk)
+                }) {
+                    is com.closecode.build.InstallRequest.Started -> {
+                        installState = com.closecode.build.InstallState.Installing(result.sessionId)
+                        toast = "Android is opening the installer."
+                    }
+                    com.closecode.build.InstallRequest.NeedsPermission -> {
+                        installState = com.closecode.build.InstallState.NeedsPermission
+                        toast = "Allow CloseCode to install apps. The install will continue when you return."
+                    }
+                    is com.closecode.build.InstallRequest.Failed -> {
+                        installState = com.closecode.build.InstallState.Failed(result.message)
+                        toast = result.message
+                    }
+                }
+            } finally {
+                installAttemptInFlight = false
+            }
+        }
+    }
     // The system's answer to our install session, wired into the state machine.
     DisposableEffect(slug) {
         val receiver = object : android.content.BroadcastReceiver() {
             override fun onReceive(
-                context: android.content.Context?,
+                receiverContext: android.content.Context?,
                 intent: android.content.Intent?,
             ) {
                 val status = intent?.getIntExtra(
@@ -423,10 +528,35 @@ internal fun IdeScreen(
                 val message = intent.getStringExtra(
                     android.content.pm.PackageInstaller.EXTRA_STATUS_MESSAGE,
                 ).orEmpty()
-                installState = com.closecode.build.nextInstallState(
+                if (status == android.content.pm.PackageInstaller.STATUS_PENDING_USER_ACTION) {
+                    @Suppress("DEPRECATION")
+                    val confirmation = intent.getParcelableExtra<android.content.Intent>(
+                        android.content.Intent.EXTRA_INTENT,
+                    )
+                    if (confirmation != null) {
+                        confirmation.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                        runCatching { context.startActivity(confirmation) }
+                            .onFailure { error ->
+                                installState = com.closecode.build.InstallState.Failed(
+                                    "Could not open Android's install confirmation: " +
+                                        (error.message ?: error::class.simpleName.orEmpty()),
+                                )
+                            }
+                    } else {
+                        installState = com.closecode.build.InstallState.Failed(
+                            "Android asked for install confirmation but did not provide its screen.",
+                        )
+                    }
+                    return
+                }
+                val nextState = com.closecode.build.nextInstallState(
                     installState,
                     com.closecode.build.InstallEvent.SystemStatus(status, packageName, message),
                 )
+                installState = nextState
+                if (nextState is com.closecode.build.InstallState.Installed) {
+                    openInstalledApp(nextState.packageName)
+                }
             }
         }
         val filter = android.content.IntentFilter(
@@ -438,6 +568,28 @@ internal fun IdeScreen(
         )
         onDispose { context.unregisterReceiver(receiver) }
     }
+    val installLifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(installLifecycleOwner, installState, builtApk) {
+        val owner = installLifecycleOwner
+        if (installState != com.closecode.build.InstallState.NeedsPermission) {
+            onDispose {}
+        } else {
+            val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+                if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME &&
+                    android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O &&
+                    context.packageManager.canRequestPackageInstalls()
+                ) {
+                    builtApk?.let(::requestApkInstall)
+                }
+            }
+            owner.lifecycle.addObserver(observer)
+            onDispose { owner.lifecycle.removeObserver(observer) }
+        }
+    }
+    LaunchedEffect(installState) {
+        val state = installState
+        if (state is com.closecode.build.InstallState.Failed) toast = state.message
+    }
     // The build and logcat streams. The log still carries nothing but what a build reports; the
     // build now reports a real sweep of the project's own files.
     val logLines = remember { mutableStateListOf<LogLine>() }
@@ -447,7 +599,7 @@ internal fun IdeScreen(
     // spams the panel builds use.
     // Debug logs behind a switch in More, off by default: with it off, ordinary
     // scrolling never spams the Logcat panel.
-    var debugLogs by remember { mutableStateOf(kvStore.getInt("debug_logs", 0) == 1) }
+    var debugLogs by remember { mutableStateOf(false) }
     LaunchedEffect(debugLogs) {
         if (debugLogs) {
             ScrollLog.mirror = { message ->
@@ -540,6 +692,7 @@ internal fun IdeScreen(
     // Build panel state: the sweep's own numbers, not a timer walking a list of task names.
     var buildProgress by remember { mutableFloatStateOf(0f) }
     var buildElapsedMs by remember { mutableStateOf(0L) }
+    var buildCompletedAtMillis by remember { mutableStateOf<Long?>(null) }
     var buildErrorCount by remember { mutableStateOf(0) }
     var buildWarningCount by remember { mutableStateOf(0) }
     var buildPhase by remember { mutableStateOf(BuildPhase.IDLE) }
@@ -1079,9 +1232,8 @@ internal fun IdeScreen(
             toast = null
         }
     }
-    // A real build: the app's own Kotlin analyser is run across the project's files and what it finds
-    // is reported. There is no Gradle daemon inside an Android app, so this is a compile check and
-    // the panel says so — but every number here is measured rather than timed out on a schedule.
+    // The Kotlin analyser checks project files, but it is not a compiler and cannot produce an
+    // APK. Keep this labeled as a compile check until the on-device toolchain is implemented.
     //
     // The whole sweep runs on Dispatchers.Default. It was on the main thread while the panel showed
     // a timer, where it was harmless because the work was fake; with real work over up to sixty
@@ -1137,6 +1289,7 @@ internal fun IdeScreen(
         }
         val (errors, warnings, elapsedMs) = result
         buildElapsedMs = elapsedMs.coerceAtMost(MAX_REPORTED_BUILD_MS)
+        buildCompletedAtMillis = System.currentTimeMillis()
         buildFilesMs = (elapsedMs - buildSymbolsMs).coerceAtLeast(0L)
         buildErrorCount = errors
         buildWarningCount = warnings
@@ -1149,31 +1302,32 @@ internal fun IdeScreen(
                 LogLine(
                     LogLevel.ERROR,
                     "Build",
-                    "BUILD FAILED · $errors errors, $warnings warnings in ${formatBuildTime(buildElapsedMs)}",
+                    "CHECK FAILED · $errors errors, $warnings warnings in ${formatBuildTime(buildElapsedMs)}",
                 ),
             )
-            toast = "Build failed · $errors errors"
+            toast = "Checks found $errors ${if (errors == 1) "error" else "errors"}"
         } else {
             logLines.appendCapped(
                 LogLine(
                     LogLevel.INFO,
                     "Build",
-                    "BUILD SUCCESSFUL · 0 errors in ${formatBuildTime(buildElapsedMs)}",
+                    "CHECK PASSED · 0 errors in ${formatBuildTime(buildElapsedMs)}",
                 ),
             )
-            toast = "Build successful · 0 errors"
+            toast = "Checks passed · no APK created"
             // On-device packaging (Part B): contract check now, toolchain-gated steps
             // report setup instead of pretending. Analysis passing is not an APK.
             val engine = com.closecode.build.BuildEngine(
                 com.closecode.build.ToolchainStore(
                     java.io.File(context.filesDir, "toolchain"),
                     kvStore,
+                    context.getSystemService(android.content.Context.CONNECTIVITY_SERVICE)
+                        as android.net.ConnectivityManager,
                 ),
-                context,
             )
             val projectRoot = runCatching { repository.projectDir(slug) }.getOrNull()
             if (projectRoot != null) {
-                when (val outcome = engine.build(projectRoot, slug)) {
+                when (val outcome = engine.build(projectRoot)) {
                     is com.closecode.build.BuildOutcome.ContractFailed -> {
                         val first = outcome.violations.first()
                         logLines.appendCapped(
@@ -1183,6 +1337,7 @@ internal fun IdeScreen(
                                 "Not packable: ${first.path} — ${first.message}",
                             ),
                         )
+                        toast = "Not packable: ${first.message}"
                     }
                     is com.closecode.build.BuildOutcome.NeedsSetup -> {
                         outcome.warnings.forEach { warning ->
@@ -1194,7 +1349,7 @@ internal fun IdeScreen(
                             LogLine(
                                 LogLevel.INFO,
                                 "Package",
-                                "Build tools are not downloaded yet — one Wi-Fi setup, then offline.",
+                                "Tool downloads are not available yet. No APK was created.",
                             ),
                         )
                     }
@@ -1385,6 +1540,13 @@ internal fun IdeScreen(
         ) {
 
             val activePath = activeFile?.path ?: active
+            val buildPackageName = diskTree.firstOrNull { it.path.endsWith("AndroidManifest.xml") }
+                ?.let { manifestPackageOf(diskContents[it.path]) }
+                ?: com.closecode.build.TemplateContract.packageForSlug(slug)
+            val buildPackageInstalled =
+                (installState as? com.closecode.build.InstallState.Installed)
+                    ?.packageName == buildPackageName ||
+                    com.closecode.build.InstallHelper.isInstalled(context, buildPackageName)
             // Terminal owns its chrome: no app top bar there — drawer, undo, save and run are
             // editor actions, and the drawer still opens from the left edge. Everywhere else
             // the bar stays exactly as it is. The drawer is a full-height modal over all of
@@ -1426,14 +1588,14 @@ internal fun IdeScreen(
                 )
                 "Build" -> IdeBuildPanel(
                     appName = projectName,
-                    packageName = diskTree.firstOrNull { it.path.endsWith("AndroidManifest.xml") }
-                        ?.let { manifestPackageOf(diskContents[it.path]) },
+                    packageName = buildPackageName,
                     version = diskTree.filter { it.path.endsWith("build.gradle.kts") }
                         .firstNotNullOfOrNull { gradleVersionOf(diskContents[it.path]) },
                     building = building,
                     errorCount = buildErrorCount,
                     warningCount = buildWarningCount,
                     elapsedMs = buildElapsedMs,
+                    completedAtMillis = buildCompletedAtMillis,
                     phase = buildPhase,
                     fileCount = buildFileCount,
                     progress = buildProgress,
@@ -1476,55 +1638,42 @@ internal fun IdeScreen(
                     installLabel = when (val state = installState) {
                         com.closecode.build.InstallState.Idle -> "Install"
                         is com.closecode.build.InstallState.Installing -> "Installing…"
-                        is com.closecode.build.InstallState.Installed -> "Open app"
+                        is com.closecode.build.InstallState.Installed ->
+                            if (buildPackageInstalled) "Open app" else "Install"
                         com.closecode.build.InstallState.NeedsPermission -> "Allow install"
                         is com.closecode.build.InstallState.Failed -> "Try install again"
                     },
-                    appInstalled = runCatching {
-                        val manifest = diskTree.firstOrNull { it.path.endsWith("AndroidManifest.xml") }
-                            ?.let { diskContents[it.path] }.orEmpty()
-                        val pkg = com.closecode.build.TemplateContract.manifestPackage(manifest)
-                            ?: com.closecode.build.TemplateContract.packageForSlug(slug)
-                        com.closecode.build.InstallHelper.isInstalled(context, pkg)
-                    }.getOrDefault(false),
-                    onInstall = {
-                        val apk = builtApk ?: return@IdeBuildPanel
-                        val session = com.closecode.build.InstallHelper.install(context, apk)
-                        if (session < 0) {
-                            installState = com.closecode.build.InstallState.NeedsPermission
-                            toast = "Allow Closecode to install apps in Settings"
-                        } else {
-                            toast = "Opening installer…"
-                            installState = com.closecode.build.nextInstallState(
-                                installState,
-                                com.closecode.build.InstallEvent.SessionOpened(session),
-                            )
-                        }
-                    },
-                    onOpenApp = {
-                        val manifest = diskTree.firstOrNull { it.path.endsWith("AndroidManifest.xml") }
-                            ?.let { diskContents[it.path] }.orEmpty()
-                        val pkg = com.closecode.build.TemplateContract.manifestPackage(manifest)
-                            ?: com.closecode.build.TemplateContract.packageForSlug(slug)
-                        com.closecode.build.InstallHelper.launchIntent(context, pkg)
-                            ?.let { runCatching { context.startActivity(it) } }
-                    },
+                    appInstalled = buildPackageInstalled,
+                    onInstall = { builtApk?.let(::requestApkInstall) },
+                    onOpenApp = { openInstalledApp(buildPackageName) },
                     onShareApk = {
-                        val apk = builtApk ?: return@IdeBuildPanel
-                        val uri = androidx.core.content.FileProvider.getUriForFile(
-                            context,
-                            "${context.packageName}.fileprovider",
-                            apk,
-                        )
-                        val share = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
-                            type = "application/vnd.android.package-archive"
-                            putExtra(android.content.Intent.EXTRA_STREAM, uri)
-                            addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                        }
-                        runCatching {
-                            context.startActivity(
-                                android.content.Intent.createChooser(share, "Share APK"),
-                            )
+                        val apk = builtApk
+                        if (apk == null) {
+                            toast = "There is no built APK to share."
+                        } else {
+                            runCatching {
+                                check(apk.isFile && apk.length() > 0L) {
+                                    "The built APK is missing or empty."
+                                }
+                                val uri = androidx.core.content.FileProvider.getUriForFile(
+                                    context,
+                                    "${context.packageName}.fileprovider",
+                                    apk,
+                                )
+                                val share = android.content.Intent(
+                                    android.content.Intent.ACTION_SEND,
+                                ).apply {
+                                    type = "application/vnd.android.package-archive"
+                                    putExtra(android.content.Intent.EXTRA_STREAM, uri)
+                                    addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                }
+                                context.startActivity(
+                                    android.content.Intent.createChooser(share, "Share APK"),
+                                )
+                            }.onFailure { error ->
+                                toast = "Could not share the APK: " +
+                                    (error.message ?: error::class.simpleName.orEmpty())
+                            }
                         }
                     },
                 )
@@ -2037,12 +2186,81 @@ internal fun IdeScreen(
                     MoreAction("Settings", "⚙") { onOpenSettings() },
                     MoreAction("Toggle theme", "◐") { onToggleTheme() },
                     MoreAction(if (debugLogs) "Debug logs: on" else "Debug logs: off", "◆") {
-                        debugLogs = !debugLogs
-                        kvStore.putInt("debug_logs", if (debugLogs) 1 else 0)
+                        val enabled = !debugLogs
+                        if (enabled) {
+                            BackLog.clear()
+                            ScrollLog.clear()
+                            logLines.clear()
+                        }
+                        debugLogs = enabled
                     },
-                ),
+                    if (debugLogs) {
+                        MoreAction("Copy debug log", "▣") {
+                            val report = com.closecode.ui.ide.debugLogReport(
+                                BackLog.snapshot(),
+                                ScrollLog.snapshot(),
+                                logLines.takeLast(500).map(LogLine::formatted),
+                            )
+                            treeClipboard.setText(
+                                androidx.compose.ui.text.AnnotatedString(report),
+                            )
+                            toast = "Debug log copied"
+                        }
+                    } else {
+                        null
+                    },
+                ).filterNotNull(),
                 onDismiss = { moreOpen = false },
                 barHeight = with(LocalDensity.current) { navBarHeightPx.toDp() },
+            )
+        }
+
+        if (overlayPromptOpen) {
+            androidx.compose.material3.AlertDialog(
+                onDismissRequest = {
+                    overlayPromptOpen = false
+                    kvStore.putInt("back_to_editor_overlay_asked", 1)
+                    pendingBackPackage?.let(::launchWithoutOverlay)
+                    pendingBackPackage = null
+                },
+                title = { Text("Return to CloseCode") },
+                text = {
+                    Text(
+                        "Allow CloseCode to show a small Back to editor button over the app " +
+                            "you just installed? The button shrinks to an edge handle after a " +
+                            "few seconds. If you do not allow it, CloseCode can use a notification.",
+                    )
+                },
+                confirmButton = {
+                    androidx.compose.material3.TextButton(
+                        onClick = {
+                            overlayPromptOpen = false
+                            kvStore.putInt("back_to_editor_overlay_asked", 1)
+                            val packageName = pendingBackPackage
+                            if (packageName != null) {
+                                try {
+                                    overlayPermissionLauncher.launch(
+                                        com.closecode.ui.ide.BackToEditor.settingsIntent(context),
+                                    )
+                                } catch (error: android.content.ActivityNotFoundException) {
+                                    pendingBackPackage = null
+                                    launchWithoutOverlay(packageName)
+                                }
+                            }
+                        },
+                    ) { Text("Allow overlay") }
+                },
+                dismissButton = {
+                    androidx.compose.material3.TextButton(
+                        onClick = {
+                            overlayPromptOpen = false
+                            kvStore.putInt("back_to_editor_overlay_asked", 1)
+                            val packageName = pendingBackPackage
+                            pendingBackPackage = null
+                            if (packageName != null) launchWithoutOverlay(packageName)
+                        },
+                    ) { Text("Continue without") }
+                },
             )
         }
 
@@ -2107,14 +2325,16 @@ internal fun IdeScreen(
             GitHubCloneScreen(
                 token = remember(githubTokenEpoch) { tokenStore.read() },
                 onToken = { fresh ->
-                    tokenStore.write(fresh)
-                    githubTokenEpoch++
+                    val saved = tokenStore.write(fresh)
+                    if (saved) githubTokenEpoch++
+                    if (saved) null else tokenStore.storageError
                 },
                 onDismiss = { cloneOpen = false },
                 onCloned = { record ->
                     cloneOpen = false
                     onProjectCloned(record)
                 },
+                tokenStorageError = tokenStore.storageError,
             )
         }
 

@@ -96,9 +96,10 @@ private data class CloneAttempt(val folder: String, val remoteUrl: String, val t
 @Composable
 fun GitHubCloneScreen(
     token: String?,
-    onToken: (String) -> Unit,
+    onToken: (String) -> String?,
     onDismiss: () -> Unit,
     onCloned: (ProjectRecord) -> Unit,
+    tokenStorageError: String? = null,
 ) {
     val c = LocalPageColors.current
     val scope = rememberCoroutineScope()
@@ -153,10 +154,14 @@ fun GitHubCloneScreen(
         onDismiss()
     })
 
-    LaunchedEffect(token) {
+    LaunchedEffect(token, tokenStorageError) {
         val active = token
         if (active == null) {
             repos = null
+            if (tokenStorageError != null) {
+                failure = tokenStorageError
+                authFailure = false
+            }
             return@LaunchedEffect
         }
         // Reaching here means a token just arrived, so whatever the old one was complained about
@@ -330,13 +335,18 @@ fun GitHubCloneScreen(
                         if (signingIn) {
                             GitHubSignInBody(
                                 onSignedIn = { fresh ->
-                                    onToken(fresh)
+                                    val storageError = onToken(fresh)
                                     signingIn = false
                                     val retry = retryAfterSignIn
                                     retryAfterSignIn = null
-                                    failure = null
-                                    authFailure = false
-                                    retry?.invoke(fresh)
+                                    if (storageError != null) {
+                                        failure = storageError
+                                        authFailure = false
+                                    } else {
+                                        failure = null
+                                        authFailure = false
+                                        retry?.invoke(fresh)
+                                    }
                                 },
                                 onCancel = { signingIn = false },
                                 modifier = Modifier.fillMaxWidth(),

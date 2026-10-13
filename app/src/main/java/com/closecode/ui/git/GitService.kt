@@ -510,12 +510,7 @@ class GitService(private val root: File) {
 
     private fun open(): Git = Git.open(root)
 
-    private fun identity(git: Git): PersonIdent {
-        val cfg = git.repository.config
-        val name = cfg.getString("user", null, "name")?.takeIf { it.isNotBlank() } ?: DEFAULT_USER
-        val email = cfg.getString("user", null, "email")?.takeIf { it.isNotBlank() } ?: DEFAULT_EMAIL
-        return PersonIdent(name, email)
-    }
+    private fun identity(git: Git): PersonIdent = PersonIdent(DEFAULT_USER, DEFAULT_EMAIL)
 
     companion object {
         const val DETACHED = "detached"

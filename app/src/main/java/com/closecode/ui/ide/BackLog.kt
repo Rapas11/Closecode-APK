@@ -29,6 +29,7 @@ object BackLog {
             stack.addLast(route)
             while (stack.size > 8) stack.removeFirst()
         }
+
     }
 
     @Synchronized
@@ -46,4 +47,24 @@ object BackLog {
 
     @Synchronized
     fun snapshot(): List<String> = events.toList()
+
+    @Synchronized
+    fun clear() {
+        events.clear()
+    }
+}
+
+internal fun debugLogReport(
+    backEvents: List<String>,
+    scrollEvents: List<ScrollLog.ScrollEvent>,
+    appLines: List<String>,
+): String {
+    val entries = buildList {
+        backEvents.forEach { add("back $it") }
+        scrollEvents.forEach {
+            add("scroll ${it.atMs} ${it.axis} ${it.from}->${it.to} ${it.reason} ${it.origin}")
+        }
+        appLines.forEach { add("app $it") }
+    }
+    return entries.takeLast(500).joinToString("\n") { it.replace('\n', ' ') }
 }

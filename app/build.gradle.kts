@@ -2,6 +2,25 @@ import java.util.zip.ZipFile
 
 val closecodeCompileSdk = 35
 
+val closecodeSourceRevision = runCatching {
+    val process = ProcessBuilder("git", "rev-parse", "--short=7", "HEAD")
+        .directory(rootDir)
+        .redirectErrorStream(true)
+        .start()
+    val output = process.inputStream.bufferedReader().use { it.readText().trim() }
+    if (process.waitFor() == 0 && output.isNotBlank()) output else "unknown"
+}.getOrDefault("unknown")
+val closecodeSourceDirty = runCatching {
+    val process = ProcessBuilder("git", "status", "--porcelain")
+        .directory(rootDir)
+        .redirectErrorStream(true)
+        .start()
+    val output = process.inputStream.bufferedReader().use { it.readText().trim() }
+    process.waitFor() == 0 && output.isNotBlank()
+}.getOrDefault(false)
+val closecodeSourceLabel = closecodeSourceRevision +
+    if (closecodeSourceDirty) "-dirty" else ""
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -11,15 +30,20 @@ plugins {
 android {
     namespace = "com.closecode"
     compileSdk = closecodeCompileSdk
+    ndkVersion = "27.3.13750724"
 
     defaultConfig {
         applicationId = "com.closecode"
         minSdk = 29
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 7
+        versionName = "1.0.6"
+        buildConfigField("String", "SOURCE_REVISION", "\"$closecodeSourceLabel\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        ndk {
+            abiFilters += listOf("arm64-v8a", "x86_64")
+        }
         vectorDrawables {
             useSupportLibrary = true
         }
@@ -57,12 +81,20 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
+    }
+    externalNativeBuild {
+        cmake {
+            path = file("src/main/cpp/CMakeLists.txt")
+            version = "3.22.1"
+        }
     }
 }
 
 dependencies {
     implementation("androidx.core:core-ktx:1.13.1")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.7")
+    implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
     implementation("androidx.activity:activity-compose:1.9.3")
     // One back stack for the top-level screens (list, recent, settings, IDE). Inner panels
     // stay explicit state with an ordered BackHandler chain — they share one composition and

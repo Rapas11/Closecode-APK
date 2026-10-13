@@ -67,4 +67,10 @@ class SettingsMeasureTest {
     fun somethingThatIsNotThereMeasuresAsZeroRatherThanThrowing() {
         assertEquals(0L, dirSize(File("/closecode/definitely/not/here")))
     }
+
+    @Test
+    fun unavailableBuildToolsCannotBeReportedAsReadyFromFileSizes() {
+        assertEquals("Unavailable", toolchainStatusLabel(false))
+        assertEquals("Ready", toolchainStatusLabel(true))
+    }
 }

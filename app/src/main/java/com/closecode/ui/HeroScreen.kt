@@ -390,6 +390,10 @@ fun HeroScreen(
         }
     }
 
+    LaunchedEffect(tokenStore.storageError) {
+        tokenStore.storageError?.let { toast = it }
+    }
+
     LaunchedEffect(toast) {
         if (toast != null) {
             kotlinx.coroutines.delay(2400)
@@ -562,10 +566,10 @@ fun HeroScreen(
     if (signInOpen) {
         GitHubSignIn(
             onSignedIn = { token ->
-                tokenStore.write(token)
-                githubToken = token
+                val saved = tokenStore.write(token)
+                githubToken = token.takeIf { saved }
                 signInOpen = false
-                toast = "Signed in to GitHub."
+                toast = if (saved) "Signed in to GitHub." else tokenStore.storageError
             },
             onDismiss = { signInOpen = false },
         )
@@ -575,8 +579,9 @@ fun HeroScreen(
         GitHubCloneScreen(
             token = githubToken,
             onToken = { fresh ->
-                tokenStore.write(fresh)
-                githubToken = fresh
+                val saved = tokenStore.write(fresh)
+                githubToken = fresh.takeIf { saved }
+                if (saved) null else tokenStore.storageError
             },
             onDismiss = { cloneOpen = false },
             onCloned = { record ->
@@ -584,6 +589,7 @@ fun HeroScreen(
                 githubOpen = false
                 onProjectCloned(record)
             },
+            tokenStorageError = tokenStore.storageError,
         )
     }
 }

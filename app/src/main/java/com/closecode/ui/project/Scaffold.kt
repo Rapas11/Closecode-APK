@@ -241,6 +241,14 @@ object Scaffold {
                     sourceCompatibility = JavaVersion.VERSION_17
                     targetCompatibility = JavaVersion.VERSION_17
                 }
+
+                buildFeatures {
+                    compose = true
+                }
+
+                composeOptions {
+                    kotlinCompilerExtensionVersion = "1.5.14"
+                }
             }
 
             dependencies {
@@ -259,7 +267,7 @@ object Scaffold {
 
             <application
                 android:label="@string/app_name"
-                android:theme="@style/Theme.${simpleName(packageName)}">
+                android:theme="@style/Theme.App">
                 <activity
                     android:name=".MainActivity"
                     android:exported="true">
@@ -279,6 +287,7 @@ object Scaffold {
         import android.os.Bundle
         import androidx.activity.ComponentActivity
         import androidx.activity.compose.setContent
+        import androidx.compose.material3.Text
 
         class MainActivity : ComponentActivity() {
             override fun onCreate(savedInstanceState: Bundle?) {
@@ -460,9 +469,6 @@ object Scaffold {
 
         Created with Closecode from the $templateName template.
     """.trimIndent() + "\n"
-
-    private fun simpleName(packageName: String): String =
-        packageName.substringAfterLast('.').replaceFirstChar { it.uppercase() }
 
     private fun slugify(value: String): String = value
         .lowercase()

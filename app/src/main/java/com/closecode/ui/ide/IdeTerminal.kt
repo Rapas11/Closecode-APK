@@ -161,7 +161,7 @@ internal class ShellProcess(
     private val directory: File?,
     private val onLine: (String) -> Unit,
     private val shellPath: String = SHELL_PATH,
-) {
+) : ShellBackend {
     private var process: Process? = null
     private var stdin: BufferedWriter? = null
     // The size the shell believes it has. Pipes carry no terminal size, so the panel measures
@@ -172,9 +172,9 @@ internal class ShellProcess(
     var rows: Int = 24
         private set
 
-    val isRunning: Boolean get() = process?.isAlive == true
+    override val isRunning: Boolean get() = process?.isAlive == true
 
-    fun start() {
+    override fun start() {
         if (process?.isAlive == true) return
         // A dead shell restarts instead of staying dead. Killing it is the only Ctrl+C there is,
         // and `exit` typed at the prompt ends it too — neither must brick the tab, leaving every
@@ -273,7 +273,7 @@ internal class ShellProcess(
     }
 
     /** Sends one command, restarting a dead shell first. Nothing typed is ever handed to a logger. */
-    fun run(command: String) {
+    override fun run(command: String) {
         if (process?.isAlive != true) start()
         val writer = stdin ?: return
         runCatching {
@@ -288,9 +288,9 @@ internal class ShellProcess(
      * fit instead of the 80 they assume behind a pipe. A restart re-exports on its own via
      * [start], so a resize is never lost — only delayed until the shell is alive to hear it.
      */
-    fun setSize(cols: Int, lines: Int = 24) {
+    override fun setSize(cols: Int, rows: Int) {
         columns = cols.coerceIn(20, 512)
-        rows = lines.coerceIn(10, 512)
+        this.rows = rows.coerceIn(10, 512)
         val writer = stdin
         if (process?.isAlive == true && writer != null) {
             runCatching {
@@ -309,14 +309,14 @@ internal class ShellProcess(
      * and comes back for more. Killing it is the closest honest equivalent, and it is what makes
      * CTRL+C stop a runaway command instead of sitting there looking busy.
      */
-    fun killRunning() {
+    override fun killRunning() {
         runCatching { process?.destroy() }
         stdin?.close()
         stdin = null
         process = null
     }
 
-    fun close() {
+    override fun close() {
         runCatching { stdin?.close() }
         runCatching { process?.destroy() }
         stdin = null

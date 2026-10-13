@@ -5,61 +5,163 @@ import android.content.SharedPreferences
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 
+private const val TOKEN_KEY = "access_token"
+
 /**
  * Where the GitHub access token lives between launches.
  *
- * Keystore-backed encrypted preferences: the token is encrypted at rest, and
- * `android:allowBackup="false"` stops the directory being copied off the device by a backup.
- * The token is never written to a log, an exception message or a repository.
- *
- * A token stored by an older version in plain preferences is moved into the encrypted store on
- * first read and wiped from the old file. If the encrypted store cannot start (broken Keystore
- * on some devices), the plain file stays the fallback rather than signing the user out — a
- * working sign-in beats a perfect one that throws on launch.
+ * Tokens are only read or written through Keystore-backed encrypted preferences. A token from an
+ * older plain-preferences store is migrated only after encrypted storage succeeds; if it cannot
+ * be migrated, the old value is removed and the user remains signed out.
  */
-class TokenStore(context: Context) {
+class TokenStore internal constructor(
+    private val encrypted: TokenPreferences?,
+    private val plain: TokenPreferences,
+) {
 
-    private val app: Context = context.applicationContext
+    constructor(context: Context) : this(
+        encryptedPreferences(context.applicationContext),
+        SharedPreferencesTokenPreferences(
+            context.applicationContext.getSharedPreferences(FILENAME, Context.MODE_PRIVATE),
+        ),
+    )
 
-    private val encrypted: SharedPreferences? = runCatching {
-        val masterKey = MasterKey.Builder(app)
-            .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
-            .build()
-        EncryptedSharedPreferences.create(
-            app,
-            FILENAME,
-            masterKey,
-            EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
-            EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM,
-        )
-    }.getOrNull()
+    @Volatile
+    var storageError: String? = if (encrypted == null) SECURE_STORAGE_ERROR else null
+        private set
 
-    private val plain: SharedPreferences by lazy {
-        app.getSharedPreferences(FILENAME, Context.MODE_PRIVATE)
-    }
-
+    @Synchronized
     fun read(): String? {
-        encrypted?.getString(KEY, null)?.takeIf { it.isNotEmpty() }?.let { return it }
-        // An older version's token: adopt it, then forget where it came from.
-        val legacy = plain.getString(KEY, null)?.takeIf { it.isNotEmpty() }
-        if (legacy != null && encrypted != null) {
-            encrypted.edit().putString(KEY, legacy).apply()
-            plain.edit().remove(KEY).apply()
+        val secure = encrypted
+        if (secure == null) {
+            discardPlainToken()
+            storageError = SECURE_STORAGE_ERROR
+            return null
         }
-        return legacy
+
+        return try {
+            secure.read()?.takeIf(String::isNotEmpty)?.let { return it }
+            val legacy = plain.read()?.takeIf(String::isNotEmpty) ?: return null
+            if (!secure.write(legacy)) {
+                clearSecure(secure)
+                discardPlainToken()
+                storageError = SECURE_STORAGE_ERROR
+                return null
+            }
+            if (!plain.clear()) {
+                clearSecure(secure)
+                storageError = SECURE_STORAGE_ERROR
+                return null
+            }
+            legacy
+        } catch (_: Exception) {
+            clearSecure(secure)
+            discardPlainToken()
+            storageError = SECURE_STORAGE_ERROR
+            null
+        }
     }
 
-    fun write(token: String) {
-        (encrypted ?: plain).edit().putString(KEY, token).apply()
+    /** Returns false and sets [storageError] if secure persistence failed. */
+    @Synchronized
+    fun write(token: String): Boolean {
+        require(token.isNotBlank()) { "GitHub access token must not be blank." }
+        val secure = encrypted
+        if (secure == null) {
+            discardPlainToken()
+            storageError = SECURE_STORAGE_ERROR
+            return false
+        }
+
+        return try {
+            if (!secure.write(token)) {
+                clearSecure(secure)
+                discardPlainToken()
+                storageError = SECURE_STORAGE_ERROR
+                false
+            } else if (!plain.clear()) {
+                clearSecure(secure)
+                storageError = SECURE_STORAGE_ERROR
+                false
+            } else {
+                storageError = null
+                true
+            }
+        } catch (_: Exception) {
+            clearSecure(secure)
+            discardPlainToken()
+            storageError = SECURE_STORAGE_ERROR
+            false
+        }
     }
 
-    fun clear() {
-        encrypted?.edit()?.remove(KEY)?.apply()
-        plain.edit().remove(KEY).apply()
+    @Synchronized
+    fun clear(): Boolean {
+        val secureCleared = try {
+            encrypted?.clear() ?: true
+        } catch (_: Exception) {
+            false
+        }
+        val plainCleared = discardPlainToken()
+        if (!secureCleared || !plainCleared) {
+            storageError = "CloseCode could not clear the saved GitHub sign-in. Please try again."
+            return false
+        }
+        storageError = if (encrypted == null) SECURE_STORAGE_ERROR else null
+        return true
+    }
+
+    private fun discardPlainToken(): Boolean = try {
+        plain.clear()
+    } catch (_: Exception) {
+        false
+    }
+
+    private fun clearSecure(secure: TokenPreferences) {
+        try {
+            secure.clear()
+        } catch (_: Exception) {
+            storageError = SECURE_STORAGE_ERROR
+        }
     }
 
     private companion object {
         const val FILENAME = "closecode_github"
-        const val KEY = "access_token"
+        const val SECURE_STORAGE_ERROR =
+            "Secure GitHub token storage is unavailable. You are signed out; please sign in again when secure storage is available."
+
+        fun encryptedPreferences(context: Context): TokenPreferences? = try {
+            val masterKey = MasterKey.Builder(context)
+                .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
+                .build()
+            SharedPreferencesTokenPreferences(
+                EncryptedSharedPreferences.create(
+                    context,
+                    FILENAME,
+                    masterKey,
+                    EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+                    EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM,
+                ),
+            )
+        } catch (_: Exception) {
+            null
+        }
     }
+}
+
+internal interface TokenPreferences {
+    fun read(): String?
+    fun write(token: String): Boolean
+    fun clear(): Boolean
+}
+
+private class SharedPreferencesTokenPreferences(
+    private val preferences: SharedPreferences,
+) : TokenPreferences {
+    override fun read(): String? = preferences.getString(TOKEN_KEY, null)
+
+    override fun write(token: String): Boolean =
+        preferences.edit().putString(TOKEN_KEY, token).commit()
+
+    override fun clear(): Boolean = preferences.edit().remove(TOKEN_KEY).commit()
 }

@@ -72,6 +72,23 @@ class GitHubClientTest {
     }
 
     @Test
+    fun rejectedOAuthClientIdIsReportedWithTheExactGitHubCode() {
+        val transport = FakeTransport().apply {
+            onForm = { _, _, _ ->
+                json(
+                    400,
+                    """{"error":"device_flow_disabled","error_description":"Device authorization is not enabled."}""",
+                )
+            }
+        }
+
+        val failure = GitHubClient(transport).requestDeviceCode().exceptionOrNull()
+
+        assertTrue(failure?.message.orEmpty().contains("device_flow_disabled"))
+        assertTrue(failure?.message.orEmpty().contains("Device authorization is not enabled."))
+    }
+
+    @Test
     fun anApprovedCodeReturnsTheToken() {
         val transport = FakeTransport().apply {
             onForm = { _, _, _ -> json(200, """{"access_token":"gho_secret","token_type":"bearer"}""") }
@@ -122,6 +139,26 @@ class GitHubClientTest {
         assertTrue(failure.isFailure)
         val message = failure.exceptionOrNull()?.message.orEmpty()
         assertTrue(message, message.contains("The code is not valid."))
+    }
+
+    @Test
+    fun replacementClientIdIsUsedForDeviceCodeAndPolling() {
+        val transport = FakeTransport().apply {
+            onForm = { _, _, form ->
+                if (form.containsKey("scope")) {
+                    json(200, """{"device_code":"device-1","user_code":"ABCD","expires_in":900,"interval":5}""")
+                } else {
+                    json(200, """{"error":"authorization_pending"}""")
+                }
+            }
+        }
+        val client = GitHubClient(transport, clientId = "replacement-client")
+
+        client.requestDeviceCode().getOrThrow()
+        client.pollForToken("device-1").getOrThrow()
+
+        assertTrue(transport.recorded[0].body.contains("client_id=replacement-client"))
+        assertTrue(transport.recorded[1].body.contains("client_id=replacement-client"))
     }
 
     @Test

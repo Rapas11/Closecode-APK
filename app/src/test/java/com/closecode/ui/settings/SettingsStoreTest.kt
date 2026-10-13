@@ -136,11 +136,44 @@ class SettingsStoreTest {
     }
 
     @Test
-    fun theScreenIsElevenSectionsAndFiftySevenRows() {
+    fun theScreenIsElevenSectionsAndFiftyEightRows() {
         // Eleven sections throughout; the on-device toolchain group added two rows
-        // (status + download) to the build section.
+        // (status + setup) and About now includes a build identifier.
         assertEquals(11, sections(SettingsLive()).size)
-        assertEquals(57, rowCount())
+        assertEquals(58, rowCount())
+    }
+
+    @Test
+    fun buildToolchainSettingsDescribeTheVerifiedSourceDownloadsAndMissingRuntime() {
+        val build = sections(SettingsLive(toolchainStatus = "Unavailable"))
+            .first { it.id == "build" }
+        val rows = build.groups.flatMap { it.rows }
+        val toolchainStatuses = rows.filterIsInstance<Row.Status>()
+            .associate { it.name to it.value }
+        val compilerStatus = rows.filterIsInstance<Row.Status>()
+            .first { it.name == "Compiler pack" }
+        val setup = rows.filterIsInstance<Row.Action>()
+            .first { it.id == SettingsAction.DOWNLOAD_TOOLCHAIN }
+
+        assertEquals("Unavailable", toolchainStatuses["Compiler pack"])
+        assertTrue(compilerStatus.description.orEmpty().contains("arm64 aapt2"))
+        assertEquals("Unavailable", toolchainStatuses["JDK"])
+        assertEquals("Not installed", toolchainStatuses["Android SDK"])
+        assertEquals("Not installed", toolchainStatuses["Build Tools"])
+        assertEquals("Open setup", setup.action)
+        assertTrue(setup.description.orEmpty().contains("Download verified sources"))
+    }
+
+    @Test
+    fun aboutShowsTheBuildNumberAndSourceRevision() {
+        val about = sections(SettingsLive(buildInfo = "2 · abc1234-dirty"))
+            .first { it.id == "about" }
+        val build = about.groups.flatMap { it.rows }
+            .filterIsInstance<Row.Value>()
+            .first { it.name == "Build" }
+
+        assertEquals("2 · abc1234-dirty", build.value)
+        assertTrue(build.description.orEmpty().contains("source revision"))
     }
 
     @Test

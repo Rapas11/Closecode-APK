@@ -40,6 +40,7 @@ import com.closecode.ui.model.SelectedTemplate
 import com.closecode.ui.model.TemplateTab
 import com.closecode.ui.model.Templates
 import com.closecode.ui.model.defaultPackageName
+import com.closecode.ui.model.packageNameError
 import com.closecode.ui.theme.LocalPageColors
 
 private enum class Step { Pick, Config, Provisioning }
@@ -210,7 +211,8 @@ fun StartProjectSheet(
                     SheetFooter(
                         name = name,
                         onNameChange = {},
-                        canCreate = selected != null,
+                        canCreate = selected != null &&
+                            (webProject || packageNameError(config.packageName) == null),
                         showNameField = false,
                         hint = if (current != null) {
                             "${current.name} · ${current.tags}"
@@ -231,4 +233,3 @@ fun StartProjectSheet(
         }
     }
 }
-

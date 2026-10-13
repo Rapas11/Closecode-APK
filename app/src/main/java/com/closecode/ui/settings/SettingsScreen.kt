@@ -21,8 +21,11 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -37,16 +40,23 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.closecode.rememberProjectRepository
+import com.closecode.ui.model.packageNameError
+import com.closecode.ui.project.ProjectRecord
 import com.closecode.ui.project.ProjectRepository
 import com.closecode.ui.theme.LocalPageColors
+import com.closecode.ui.theme.Mono
 import com.closecode.ui.theme.Sans
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -88,18 +98,20 @@ private class SettingsFacts(
             version = runCatching {
                 context.packageManager.getPackageInfo(context.packageName, 0).versionName
             }.getOrNull() ?: "1.0.0",
+            buildInfo = "${com.closecode.BuildConfig.VERSION_CODE} · " +
+                com.closecode.BuildConfig.SOURCE_REVISION,
             toolchainStatus = toolchainStatus(),
         )
     }
 
-    /** Ready only when every pinned file sits at its manifest size. */
+    /** Never infer toolchain readiness from file sizes; artifacts need verified hashes and a build path. */
     private fun toolchainStatus(): String {
-        val dir = java.io.File(context.filesDir, "toolchain")
-        val missing = com.closecode.build.ToolchainManifest.components.count { component ->
-            val file = java.io.File(dir, component.fileName)
-            !(file.isFile && file.length() == component.sizeBytes)
-        }
-        return if (missing == 0) "Ready" else "$missing files missing"
+        val store = com.closecode.build.ToolchainStore(
+            java.io.File(context.filesDir, "toolchain"),
+            SharedPreferencesKeyValueStore(context),
+            context.getSystemService(Context.CONNECTIVITY_SERVICE) as android.net.ConnectivityManager,
+        )
+        return toolchainStatusLabel(store.isReady())
     }
 
     /** Only ever touches directories the platform owns; nothing under `filesDir` is touched. */
@@ -119,6 +131,8 @@ fun SettingsScreen(
     onBack: () -> Unit,
     settings: Settings,
     onSettingsChange: (Settings) -> Unit,
+    projectRecord: ProjectRecord? = null,
+    onPackageNameChange: (ProjectRecord) -> Unit = {},
 ) {
     val c = LocalPageColors.current
     val widthDp = LocalConfiguration.current.screenWidthDp
@@ -128,6 +142,43 @@ fun SettingsScreen(
     val repository = rememberProjectRepository()
     val facts = remember(context, repository) { SettingsFacts(context, repository) }
     val scope = rememberCoroutineScope()
+    fun savePackageName(packageName: String) {
+        val project = projectRecord ?: return
+        scope.launch {
+            runCatching {
+                withContext(Dispatchers.IO) {
+                    repository.updatePackageName(project.slug, packageName)
+                }
+            }.onSuccess(onPackageNameChange)
+                .onFailure {
+                    android.widget.Toast.makeText(
+                        context,
+                        it.message ?: "Could not update package name",
+                        android.widget.Toast.LENGTH_LONG,
+                    ).show()
+                }
+        }
+    }
+    var resolvedPackage by remember(
+        projectRecord?.slug,
+        projectRecord?.config?.packageName,
+    ) {
+        mutableStateOf(projectRecord?.config?.packageName)
+    }
+    LaunchedEffect(projectRecord?.slug, projectRecord?.config?.packageName) {
+        val project = projectRecord ?: return@LaunchedEffect
+        runCatching {
+            withContext(Dispatchers.IO) { repository.packageName(project.slug) }
+        }.onSuccess { packageName ->
+            if (packageName != null) resolvedPackage = packageName
+        }.onFailure {
+            android.widget.Toast.makeText(
+                context,
+                it.message ?: "Could not read this project's package name",
+                android.widget.Toast.LENGTH_LONG,
+            ).show()
+        }
+    }
     var live by remember { mutableStateOf(SettingsLive()) }
     LaunchedEffect(facts) { live = facts.measure() }
     // On-device toolchain setup: full-screen over settings, dismissed back to it.
@@ -136,6 +187,7 @@ fun SettingsScreen(
         com.closecode.build.ToolchainStore(
             java.io.File(context.filesDir, "toolchain"),
             SharedPreferencesKeyValueStore(context),
+            context.getSystemService(Context.CONNECTIVITY_SERVICE) as android.net.ConnectivityManager,
         )
     }
     if (setupOpen) {
@@ -181,6 +233,9 @@ fun SettingsScreen(
                     wide = true,
                     settings = settings,
                     onSettingsChange = onSettingsChange,
+                    projectRecord = projectRecord,
+                    resolvedPackage = resolvedPackage,
+                    onPackageNameChange = ::savePackageName,
                     onAction = { action ->
                         if (action == SettingsAction.CLEAR_CACHES) {
                             scope.launch { live = facts.clearCaches() }
@@ -212,6 +267,9 @@ fun SettingsScreen(
                     wide = false,
                     settings = settings,
                     onSettingsChange = onSettingsChange,
+                    projectRecord = projectRecord,
+                    resolvedPackage = resolvedPackage,
+                    onPackageNameChange = ::savePackageName,
                     onAction = { action ->
                         if (action == SettingsAction.CLEAR_CACHES) {
                             scope.launch { live = facts.clearCaches() }
@@ -369,12 +427,112 @@ private fun NavItem(
 }
 
 @Composable
+private fun ProjectPackageSetting(
+    initialPackage: String,
+    onSave: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val c = LocalPageColors.current
+    var packageName by remember(initialPackage) { mutableStateOf(initialPackage) }
+    val error = packageNameError(packageName)
+
+    Column(
+        modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(13.dp))
+            .background(c.panel)
+            .border(1.dp, c.ln, RoundedCornerShape(13.dp))
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Text(
+            text = "Android package",
+            color = c.tx,
+            fontSize = 14.sp,
+            fontFamily = Sans,
+            fontWeight = FontWeight.SemiBold,
+        )
+        Text(
+            text = "This name identifies the installed app.",
+            color = c.mu,
+            fontSize = 12.sp,
+            fontFamily = Sans,
+        )
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(10.dp))
+                .background(c.cd)
+                .border(1.dp, c.ln, RoundedCornerShape(10.dp))
+                .padding(horizontal = 12.dp, vertical = 13.dp),
+        ) {
+            BasicTextField(
+                value = packageName,
+                onValueChange = { packageName = it.trim() },
+                singleLine = true,
+                textStyle = LocalTextStyle.current.copy(
+                    color = c.tx,
+                    fontSize = 14.sp,
+                    fontFamily = Mono,
+                ),
+                cursorBrush = SolidColor(c.ac),
+                keyboardOptions = KeyboardOptions(
+                    capitalization = KeyboardCapitalization.None,
+                    autoCorrect = false,
+                    keyboardType = KeyboardType.Text,
+                    imeAction = ImeAction.Done,
+                ),
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+        if (error != null) {
+            Text(
+                text = error,
+                color = c.red,
+                fontSize = 12.sp,
+                fontFamily = Sans,
+            )
+        } else if (packageName != "com.closecode" &&
+            !packageName.startsWith("com.closecode.")
+        ) {
+            Text(
+                text = "This app will install as $packageName.",
+                color = c.mu,
+                fontSize = 12.sp,
+                fontFamily = Sans,
+            )
+        }
+        Box(
+            Modifier
+                .align(Alignment.End)
+                .clip(RoundedCornerShape(9.dp))
+                .background(if (error == null && packageName != initialPackage) c.ac else c.cd)
+                .clickable(enabled = error == null && packageName != initialPackage) {
+                    onSave(packageName)
+                }
+                .padding(horizontal = 15.dp, vertical = 9.dp),
+        ) {
+            Text(
+                text = "Save package",
+                color = if (error == null && packageName != initialPackage) c.af else c.mu,
+                fontSize = 12.sp,
+                fontFamily = Sans,
+                fontWeight = FontWeight.SemiBold,
+            )
+        }
+    }
+}
+
+@Composable
 private fun SectionContent(
     section: Section,
     wide: Boolean,
     settings: Settings,
     onSettingsChange: (Settings) -> Unit,
     onAction: (SettingsAction) -> Unit,
+    projectRecord: ProjectRecord?,
+    resolvedPackage: String?,
+    onPackageNameChange: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val c = LocalPageColors.current
@@ -406,6 +564,20 @@ private fun SectionContent(
                     lineHeight = 22.4.sp,
                     fontFamily = Sans,
                     modifier = Modifier.padding(top = 7.dp),
+                )
+            }
+        }
+
+        if (section.id == "general" &&
+            projectRecord != null &&
+            (projectRecord.tab == com.closecode.ui.model.TemplateTab.App ||
+                projectRecord.templateName.isBlank())
+        ) {
+            item(key = "project-package") {
+                ProjectPackageSetting(
+                    initialPackage = resolvedPackage ?: projectRecord.config.packageName,
+                    onSave = onPackageNameChange,
+                    modifier = Modifier.padding(bottom = 28.dp),
                 )
             }
         }

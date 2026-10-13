@@ -153,7 +153,7 @@ private fun countOf(n: Int, one: String, many: String): String =
     "$n ${if (n == 1) one else many}"
 
 /**
- * The one line that says whether the project compiled.
+ * The one line that reports what the static check found.
  *
  * Counts and time come from the sweep that just ran, so this is a report rather than a mood. The
  * failing case says the errors are in the marked lines, because that is where they can be acted on
@@ -162,10 +162,10 @@ private fun countOf(n: Int, one: String, many: String): String =
 internal fun buildResultLine(errorCount: Int, warningCount: Int, elapsedMs: Long): String {
     val time = formatBuildTime(elapsedMs)
     return when {
-        errorCount > 0 -> "BUILD FAILED · ${countOf(errorCount, "error", "errors")}, " +
+        errorCount > 0 -> "CHECK FAILED · ${countOf(errorCount, "error", "errors")}, " +
             "${countOf(warningCount, "warning", "warnings")} in $time. Open the marked lines to fix."
-        warningCount > 0 -> "BUILD SUCCESSFUL · ${countOf(warningCount, "warning", "warnings")} in $time"
-        else -> "BUILD SUCCESSFUL · 0 errors in $time"
+        warningCount > 0 -> "CHECK PASSED · ${countOf(warningCount, "warning", "warnings")} in $time"
+        else -> "CHECK PASSED · 0 errors in $time"
     }
 }
 
@@ -283,7 +283,7 @@ fun IdeLogcatPanel(
 }
 
 /**
- * Spec 7 Build panel: the app header, a result bar, one row per phase of the compile check
+ * Spec 7 compile-check panel: the app header, a result bar, one row per phase of the check
  * with its measured time, and the actions that mean something.
  *
  * This is a real check, not a Gradle build: there is no Gradle daemon inside an Android app and
@@ -306,6 +306,7 @@ internal fun IdeBuildPanel(
     errorCount: Int,
     warningCount: Int,
     elapsedMs: Long,
+    completedAtMillis: Long? = null,
     phase: BuildPhase,
     fileCount: Int,
     progress: Float,
@@ -350,7 +351,7 @@ internal fun IdeBuildPanel(
     }
 
     Column(modifier.fillMaxSize().background(c.bg)) {
-        PanelBackBar("Build", onBack)
+        PanelBackBar("Compile check", onBack)
         Column(
             Modifier
                 .weight(1f)
@@ -428,9 +429,9 @@ internal fun IdeBuildPanel(
                     Spacer(Modifier.width(10.dp))
                     Text(
                         text = if (failed) {
-                            "Build failed · $errorCount ${if (errorCount == 1) "error" else "errors"}"
+                            "Checks found $errorCount ${if (errorCount == 1) "error" else "errors"}"
                         } else {
-                            "Build successful · ${formatBuildTime(elapsedMs)}"
+                            "Checks passed · no APK was created"
                         },
                         color = if (failed) Color(0xFFF2A0A0) else Color(0xFF5FD19A),
                         fontSize = 13.sp,
@@ -535,7 +536,12 @@ internal fun IdeBuildPanel(
                         )
                     }
                     Text(
-                        text = "Last build · ${formatBuildTime(elapsedMs)} · " +
+                        text = "Last check · " +
+                            (completedAtMillis?.let {
+                                java.text.DateFormat.getTimeInstance(java.text.DateFormat.SHORT)
+                                    .format(java.util.Date(it))
+                            } ?: "time unavailable") +
+                            " · ${formatBuildTime(elapsedMs)} · " +
                             "$errorCount ${if (errorCount == 1) "error" else "errors"}",
                         color = c.textFaint,
                         fontSize = 11.sp,

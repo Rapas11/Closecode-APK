@@ -5,11 +5,21 @@
          and the local preview server (a ServerSocket needs it too). Without this the web
          preview and GitHub are dead on arrival. -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
     <!-- Installing apps the phone itself built: the system still shows its own consent
          screen every time, and Android 12+ needs a one-time allow-this-source toggle
          the app opens settings for but can never flip itself. -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
+        </intent>
+    </queries>
 
     <!-- The GitHub token is kept in this app's private preferences. Disabling backup stops it
          leaving the device through adb backup or cloud restore. -->
@@ -32,6 +42,10 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <service
+            android:name=".ui.ide.BackToEditorOverlayService"
+            android:exported="false" />
 
         <!-- Projects live in the app's private storage, which no other app can open. The
              "Reveal in file manager" action hands out a content:// URI through this provider

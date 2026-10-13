@@ -65,15 +65,26 @@ data class GitHubRepo(
  * The client id is public by design — it identifies the app, not a person — and the access
  * token never appears in a log or an exception message.
  */
-class GitHubClient(private val http: HttpTransport = UrlConnectionTransport()) {
+class GitHubClient(
+    private val http: HttpTransport = UrlConnectionTransport(),
+    private val clientId: String = CLIENT_ID,
+) {
 
     fun requestDeviceCode(): Result<DeviceCode> = runCatching {
         val resp = http.postForm(
             DEVICE_CODE_URL,
             acceptJson(),
-            mapOf("client_id" to CLIENT_ID, "scope" to SCOPE),
+            mapOf("client_id" to clientId, "scope" to SCOPE),
         )
         val json = bodyOrThrow(resp, "start the sign-in")
+        json.optionalString("error")?.let { error ->
+            val description = json.optionalString("error_description")
+            throw GitHubException(
+                "GitHub could not start the sign-in: " +
+                    listOfNotNull(error, description).distinct().joinToString(": "),
+                resp.code,
+            )
+        }
         DeviceCode(
             deviceCode = json.requireString("device_code"),
             userCode = json.requireString("user_code"),
@@ -88,7 +99,7 @@ class GitHubClient(private val http: HttpTransport = UrlConnectionTransport()) {
             ACCESS_TOKEN_URL,
             acceptJson(),
             mapOf(
-                "client_id" to CLIENT_ID,
+                "client_id" to clientId,
                 "device_code" to deviceCode,
                 "grant_type" to DEVICE_GRANT_TYPE,
             ),
@@ -177,10 +188,14 @@ class GitHubClient(private val http: HttpTransport = UrlConnectionTransport()) {
     private fun check(resp: HttpResponse, doing: String) {
         if (resp.code in 200..299) return
         val parsed = runCatching { JsonParser.parseString(resp.body) }.getOrNull()
-        val message = (parsed as? JsonObject)?.let {
-            it.optionalString("message") ?: it.optionalString("error_description") ?: it.optionalString("error")
+        val details = (parsed as? JsonObject)?.let { json ->
+            listOfNotNull(
+                json.optionalString("message"),
+                json.optionalString("error"),
+                json.optionalString("error_description"),
+            ).distinct().joinToString(": ").ifEmpty { null }
         }
-        throw GitHubException("GitHub could not $doing: ${message ?: "HTTP ${resp.code}"}", resp.code)
+        throw GitHubException("GitHub could not $doing: ${details ?: "HTTP ${resp.code}"}", resp.code)
     }
 
     private fun bodyOrThrow(resp: HttpResponse, doing: String): JsonObject {

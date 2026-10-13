@@ -37,6 +37,7 @@ import com.closecode.ui.model.LanguageOptions
 import com.closecode.ui.model.MinSdkOptions
 import com.closecode.ui.model.ProjectConfig
 import com.closecode.ui.model.SdkOptions
+import com.closecode.ui.model.packageNameError
 import com.closecode.ui.theme.LocalPageColors
 import com.closecode.ui.theme.Sans
 
@@ -60,6 +61,14 @@ fun ConfigForm(
                 value = config.packageName,
                 onValueChange = { onConfigChange(config.copy(packageName = it)) },
             )
+            packageNameError(config.packageName)?.let { message ->
+                Text(
+                    text = message,
+                    color = LocalPageColors.current.red,
+                    fontSize = 12.sp,
+                    fontFamily = Sans,
+                )
+            }
             ConfigDropdown(
                 label = "Language",
                 value = config.language,

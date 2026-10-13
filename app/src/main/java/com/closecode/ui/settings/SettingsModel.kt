@@ -125,8 +125,12 @@ data class SettingsLive(
     val projectsSize: String = "…",
     val cachesSize: String = "…",
     val version: String = "1.0.0",
+    val buildInfo: String = "unknown",
     val toolchainStatus: String = "…",
 )
+
+internal fun toolchainStatusLabel(isReady: Boolean): String =
+    if (isReady) "Ready" else "Unavailable"
 
 /**
  * The settings screen: every row, across every section, built as a function of [live].
@@ -267,10 +271,10 @@ fun sections(live: SettingsLive): List<Section> = listOf(
             Group(
                 "Toolchain",
                 listOf(
-                    Row.Status("JDK", "Java runtime used for Android builds.", "Java 17"),
-                    Row.Status("Android SDK", null, "SDK 35"),
-                    Row.Status("Build Tools", null, "35.0.0"),
-                    Row.Value("Gradle", null, "Managed"),
+                    Row.Status("JDK", "A project-build Java compiler is not installed.", "Unavailable"),
+                    Row.Status("Android SDK", "The API index is for editor hints, not app builds.", "Not installed"),
+                    Row.Status("Build Tools", null, "Not installed"),
+                    Row.Value("Gradle", null, "Not used for on-phone builds"),
                 ),
             ),
             Group(
@@ -278,14 +282,16 @@ fun sections(live: SettingsLive): List<Section> = listOf(
                 listOf(
                     Row.Status(
                         "Compiler pack",
-                        "Kotlin, Java, dex and signer. One Wi-Fi download, then offline.",
+                        "Verified compiler source archives can be downloaded, but the Android " +
+                            "DEX runtime and arm64 aapt2 needed to build APKs are still missing.",
                         live.toolchainStatus,
                         ok = live.toolchainStatus == "Ready",
                     ),
                     Row.Action(
-                        "Download build tools",
-                        "About 80 MB over Wi-Fi. Resumes if interrupted.",
-                        "Download",
+                        "Build tool setup",
+                        "Download verified sources and check setup requirements. This does not " +
+                            "yet create APKs.",
+                        "Open setup",
                         SettingsAction.DOWNLOAD_TOOLCHAIN,
                     ),
                 ),
@@ -463,6 +469,7 @@ fun sections(live: SettingsLive): List<Section> = listOf(
                 "Closecode",
                 listOf(
                     Row.Value("Version", "This build of Closecode.", live.version),
+                    Row.Value("Build", "Build number and source revision.", live.buildInfo),
                     Row.Nav("Open source licenses", null, "View"),
                     Row.Nav("Privacy", null, "View"),
                 ),

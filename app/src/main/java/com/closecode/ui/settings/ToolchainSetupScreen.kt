@@ -9,20 +9,31 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Switch
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.platform.LocalContext
+import android.content.Intent
+import android.content.ActivityNotFoundException
+import android.net.Uri
 import com.closecode.build.ToolchainManifest
 import com.closecode.build.ToolchainState
 import com.closecode.build.ToolchainStore
@@ -31,12 +42,6 @@ import com.closecode.ui.theme.LocalPageColors
 import com.closecode.ui.theme.Sans
 import kotlinx.coroutines.launch
 
-/**
- * First-setup download: the compiler pack over Wi-Fi, once, then offline. Shows
- * real progress per file, verifies hashes, and states the aapt2 license before
- * anything is fetched: it arrives as a user SDK download (SDK license, like
- * AndroidIDE), or as an AOSP build made here if that source ever goes unclear.
- */
 @Composable
 fun ToolchainSetupScreen(
     store: ToolchainStore,
@@ -44,9 +49,12 @@ fun ToolchainSetupScreen(
     onDone: () -> Unit = {},
 ) {
     val c = LocalPageColors.current
-    val scope = rememberCoroutineScope()
     val state by store.state.collectAsState()
-    val totalMb = ToolchainManifest.totalBytes / 1_048_576
+    val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+    var allowMobileData by remember { mutableStateOf(false) }
+    var acceptedAndroidSdkLicense by remember { mutableStateOf(store.androidSdkLicenseAccepted()) }
+    val downloading = state is ToolchainState.Downloading || state is ToolchainState.Verifying
 
     Column(
         Modifier
@@ -64,24 +72,109 @@ fun ToolchainSetupScreen(
         )
         Spacer(Modifier.height(6.dp))
         Text(
-            text = "About $totalMb MB over Wi-Fi, once. Afterwards your phone builds " +
-                "fully offline. Downloads resume where they stopped.",
+            text = "Download checksum-verified Android and compiler source files. Downloads " +
+                "resume after interruption and use Wi-Fi unless you opt in to mobile data.",
             color = c.textMuted,
             fontSize = 13.sp,
             fontFamily = Sans,
             lineHeight = 19.sp,
         )
         Spacer(Modifier.height(16.dp))
+        ToolchainManifest.components.forEach { component ->
+            Text(
+                text = "${component.fileName} · ${"%.1f".format(component.sizeBytes / 1_000_000.0)} MB · ${component.license}",
+                color = c.text,
+                fontSize = 11.sp,
+                fontFamily = Sans,
+                modifier = Modifier.padding(vertical = 3.dp),
+            )
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Checkbox(
+                checked = acceptedAndroidSdkLicense,
+                onCheckedChange = {
+                    acceptedAndroidSdkLicense = it
+                    store.setAndroidSdkLicenseAccepted(it)
+                },
+                enabled = !downloading,
+            )
+            Text(
+                text = "I accept the Android SDK License",
+                color = c.text,
+                fontSize = 12.sp,
+                fontFamily = Sans,
+                modifier = Modifier
+                    .clickable {
+                        try {
+                            context.startActivity(
+                                Intent(
+                                    Intent.ACTION_VIEW,
+                                    Uri.parse("https://developer.android.com/studio/terms"),
+                                ),
+                            )
+                        } catch (_: ActivityNotFoundException) {
+                            android.widget.Toast.makeText(
+                                context,
+                                "Could not open the Android SDK License page.",
+                                android.widget.Toast.LENGTH_LONG,
+                            ).show()
+                        }
+                    }
+                    .padding(4.dp),
+            )
+        }
+        Spacer(Modifier.height(12.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = "Allow mobile data downloads",
+                color = c.text,
+                fontSize = 13.sp,
+                fontFamily = Sans,
+            )
+            Switch(
+                checked = allowMobileData,
+                onCheckedChange = { allowMobileData = it },
+                enabled = !downloading,
+            )
+        }
+        Spacer(Modifier.height(8.dp))
+        PrimaryButton(
+            label = if (downloading) "Downloading…" else "Download verified artifacts",
+            enabled = !downloading,
+            onClick = { scope.launch { store.ensureAll(allowMobileData) } },
+        )
+        Spacer(Modifier.height(12.dp))
+        Text(
+            text = "Important: these verified source archives are not a complete on-device " +
+                "builder. Android-compatible DEX runtime files and arm64 aapt2 are still " +
+                "missing, so CloseCode will not claim the toolchain is ready or produce an APK.",
+            color = c.textMuted,
+            fontSize = 12.sp,
+            fontFamily = Sans,
+            lineHeight = 18.sp,
+        )
+        Spacer(Modifier.height(16.dp))
         when (val current = state) {
             ToolchainState.NotStarted -> {
-                ToolComponentList()
-                Spacer(Modifier.height(16.dp))
-                PrimaryButton(label = "Download", onClick = { scope.launch { store.ensureAll() } })
+                Text(
+                    text = "At least 1.5 GB of free storage is required before downloading.",
+                    color = c.text,
+                    fontSize = 13.sp,
+                    fontFamily = Sans,
+                    lineHeight = 19.sp,
+                    modifier = Modifier.padding(top = 16.dp),
+                )
             }
             is ToolchainState.Downloading -> {
-                val doneMb = current.doneBytes / 1_048_576
                 Text(
-                    text = "${current.current} · $doneMb of $totalMb MB",
+                    text = "${current.current} · ${current.doneBytes} bytes",
                     color = c.text,
                     fontSize = 13.sp,
                     fontFamily = Sans,
@@ -108,7 +201,15 @@ fun ToolchainSetupScreen(
             }
             is ToolchainState.Verifying -> {
                 Text(
-                    text = "Checking ${current.fileName}…",
+                    text = "Checking ${current.fileName}",
+                    color = c.text,
+                    fontSize = 13.sp,
+                    fontFamily = Sans,
+                )
+            }
+            is ToolchainState.Extracting -> {
+                Text(
+                    text = "Unpacking ${current.fileName}",
                     color = c.text,
                     fontSize = 13.sp,
                     fontFamily = Sans,
@@ -125,6 +226,15 @@ fun ToolchainSetupScreen(
                 Spacer(Modifier.height(16.dp))
                 PrimaryButton(label = "Done", onClick = { onDone(); onClose() })
             }
+            is ToolchainState.DownloadedNotReady -> {
+                Text(
+                    text = current.message,
+                    color = c.error,
+                    fontSize = 13.sp,
+                    fontFamily = Sans,
+                    lineHeight = 19.sp,
+                )
+            }
             is ToolchainState.Failed -> {
                 Text(
                     text = current.message,
@@ -134,29 +244,8 @@ fun ToolchainSetupScreen(
                     lineHeight = 19.sp,
                 )
                 Spacer(Modifier.height(16.dp))
-                PrimaryButton(label = "Try again", onClick = { scope.launch { store.ensureAll() } })
             }
         }
-        Spacer(Modifier.height(20.dp))
-        Text(
-            text = "Licenses",
-            color = c.brightText,
-            fontSize = 14.sp,
-            fontFamily = Sans,
-            fontWeight = FontWeight.Medium,
-        )
-        Spacer(Modifier.height(4.dp))
-        Text(
-            text = "Kotlin compiler (Apache 2.0), ECJ (EPL-2.0, used unmodified), " +
-                "R8 marches under BSD-3, apksig under Apache 2.0. aapt2 arrives as your " +
-                "own SDK download under the SDK license, exactly like AndroidIDE fetches " +
-                "it — or as an AOSP build made here if that source ever goes unclear. " +
-                "Native tools ship inside this app and never run from writable storage.",
-            color = c.textFaint,
-            fontSize = 11.sp,
-            fontFamily = Sans,
-            lineHeight = 16.sp,
-        )
         Spacer(Modifier.height(16.dp))
         Box(
             Modifier
@@ -167,28 +256,5 @@ fun ToolchainSetupScreen(
         ) {
             Text(text = "Close", color = c.textMuted, fontSize = 14.sp, fontFamily = Sans)
         }
-    }
-}
-
-@Composable
-private fun ToolComponentList() {
-    val c = LocalPageColors.current
-    Column {
-        ToolchainManifest.components.forEach { component ->
-            Text(
-                text = "${component.id} ${component.version} · ${component.sizeBytes / 1_048_576} MB",
-                color = c.text,
-                fontSize = 13.sp,
-                fontFamily = Sans,
-                modifier = Modifier.padding(vertical = 3.dp),
-            )
-        }
-        Text(
-            text = "plus arm64 aapt2 ${ToolchainManifest.AAPT2_VERSION} (SDK download)",
-            color = c.text,
-            fontSize = 13.sp,
-            fontFamily = Sans,
-            modifier = Modifier.padding(vertical = 3.dp),
-        )
     }
 }

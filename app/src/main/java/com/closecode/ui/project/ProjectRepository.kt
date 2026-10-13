@@ -5,6 +5,12 @@ import com.closecode.ui.model.ProjectConfig
 import com.closecode.ui.model.ProjectFile
 import com.closecode.ui.model.SelectedTemplate
 import com.closecode.ui.model.TemplateTab
+import com.closecode.ui.model.packageNameFromProject
+import com.closecode.ui.model.packageNameError
+import com.closecode.ui.model.packageNamesFromProject
+import com.closecode.ui.model.replaceAndroidBuildPackage
+import com.closecode.ui.model.replaceManifestPackage
+import com.closecode.ui.model.replaceSourcePackagePrefixes
 import org.json.JSONObject
 
 data class ProjectRecord(
@@ -59,6 +65,12 @@ class ProjectRepository(context: Context) {
             .sortedByDescending { it.lastOpened }
 
     fun find(slug: String): ProjectRecord? = listProjects().firstOrNull { it.slug == slug }
+
+    fun packageName(slug: String): String? {
+        val projectDir = store.projectDir(slug)
+        val config = readProjectConfig(projectDir)
+        return config.packageName
+    }
 
     fun create(
         name: String,
@@ -116,13 +128,14 @@ class ProjectRepository(context: Context) {
             target.deleteRecursively()
             throw failure
         }
+        val importedConfig = readProjectConfig(target)
         val record = ProjectRecord(
             slug = slug,
             name = name,
             tab = TemplateTab.Web,
             templateIndex = 0,
             templateName = "",
-            config = ProjectConfig(),
+            config = importedConfig,
             createdAt = now,
             lastOpened = now,
         )
@@ -134,6 +147,50 @@ class ProjectRepository(context: Context) {
         val record = find(slug) ?: return null
         val updated = record.copy(lastOpened = now)
         store.createFile(slug, ProjectStore.METADATA, updated.toJson())
+        return updated
+    }
+
+    fun updatePackageName(slug: String, packageName: String): ProjectRecord {
+        packageNameError(packageName)?.let { throw ProjectPathException(it) }
+        val record = find(slug) ?: throw ProjectPathException("Project not found.")
+        val root = store.projectDir(slug)
+        val manifestPath = "app/src/main/AndroidManifest.xml"
+        val manifest = java.io.File(root, manifestPath)
+        val appBuildPath = sequenceOf("app/build.gradle.kts", "app/build.gradle")
+            .firstOrNull { java.io.File(root, it).isFile }
+        val manifestContent = if (manifest.isFile) store.readText(slug, manifestPath) else ""
+        val appBuildContent = appBuildPath?.let { store.readText(slug, it) }.orEmpty()
+        val oldPackages = (
+            packageNamesFromProject(manifestContent, appBuildContent) +
+                record.config.packageName
+            ).distinct()
+
+        val updates = linkedMapOf<String, String>()
+        if (manifest.isFile) {
+            updates[manifestPath] = try {
+                replaceManifestPackage(manifestContent, packageName)
+            } catch (e: IllegalArgumentException) {
+                throw ProjectPathException(e.message ?: "The Android manifest is invalid.")
+            }
+        }
+        appBuildPath?.let { path ->
+            updates[path] = replaceAndroidBuildPackage(appBuildContent, packageName)
+        }
+        if (oldPackages.any(String::isNotBlank)) {
+            store.readTree(slug)
+                .asSequence()
+                .map { it.path }
+                .filter { it.endsWith(".kt") || it.endsWith(".java") }
+                .forEach { path ->
+                    val original = store.readText(slug, path)
+                    val changed = replaceSourcePackagePrefixes(original, oldPackages, packageName)
+                    if (changed != original) updates[path] = changed
+                }
+        }
+
+        updates.forEach { (path, content) -> store.writeText(slug, path, content) }
+        val updated = record.copy(config = record.config.copy(packageName = packageName))
+        store.writeText(slug, ProjectStore.METADATA, updated.toJson())
         return updated
     }
 
@@ -195,6 +252,24 @@ class ProjectRepository(context: Context) {
             .getOrNull(selection.index)
             ?.name
             .orEmpty()
+
+    private fun readProjectConfig(projectDir: java.io.File): ProjectConfig {
+        val manifest = java.io.File(projectDir, "app/src/main/AndroidManifest.xml")
+        val appBuildFile = sequenceOf(
+            java.io.File(projectDir, "app/build.gradle.kts"),
+            java.io.File(projectDir, "app/build.gradle"),
+        ).firstOrNull { it.isFile }
+        if ((manifest.isFile && !manifest.canRead()) ||
+            (appBuildFile != null && !appBuildFile.canRead())
+        ) {
+            throw java.io.IOException("Could not read the cloned app package settings.")
+        }
+        val packageName = packageNameFromProject(
+            manifestXml = if (manifest.isFile) manifest.readText() else "",
+            appBuildFile = appBuildFile?.readText().orEmpty(),
+        )
+        return if (packageName == null) ProjectConfig() else ProjectConfig(packageName = packageName)
+    }
 
     private fun uniqueSlug(name: String): String {
         val base = slugify(name)

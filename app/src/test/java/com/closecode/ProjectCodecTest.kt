@@ -9,6 +9,12 @@ import com.closecode.ui.model.SdkOptions
 import com.closecode.ui.model.SelectedTemplate
 import com.closecode.ui.model.TemplateTab
 import com.closecode.ui.model.defaultPackageName
+import com.closecode.ui.model.packageNameError
+import com.closecode.ui.model.packageNameFromProject
+import com.closecode.ui.model.packageNamesFromProject
+import com.closecode.ui.model.replaceAndroidBuildPackage
+import com.closecode.ui.model.replaceManifestPackage
+import com.closecode.ui.model.replaceSourcePackagePrefixes
 import com.closecode.ui.model.relativeTime
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -133,6 +139,85 @@ class ProjectCodecTest {
         assertEquals("com.closecode.myapp", defaultPackageName("My App"))
         assertEquals("com.closecode.a1b2", defaultPackageName("a-1_B 2"))
         assertEquals("com.closecode.myproject", defaultPackageName("!!!"))
+    }
+
+    @Test
+    fun packageNameValidationAcceptsCustomAndForeignPackages() {
+        assertNull(packageNameError("com.closecode.biztrack"))
+        assertNull(packageNameError("com.example.biztrack"))
+        assertNull(packageNameError("org.acme.my_app2"))
+    }
+
+    @Test
+    fun packageNameValidationRejectsMalformedAndReservedParts() {
+        assertTrue(packageNameError("com..bad") != null)
+        assertTrue(packageNameError("9com.example") != null)
+        assertTrue(packageNameError("com.class.app") != null)
+        assertTrue(packageNameError("singlepart") != null)
+    }
+
+    @Test
+    fun importedPackagePrefersManifestAndFallsBackToGradle() {
+        assertEquals(
+            "com.example.manifest",
+            packageNameFromProject(
+                """<manifest package="com.example.manifest" />""",
+                """namespace = "com.example.namespace"
+                   applicationId = "com.example.application"
+                """.trimIndent(),
+            ),
+        )
+        assertEquals(
+            "com.example.application",
+            packageNameFromProject(
+                "<manifest />",
+                """namespace = "com.example.namespace"
+                   applicationId = "com.example.application"
+                """.trimIndent(),
+            ),
+        )
+        assertNull(packageNameFromProject("<manifest />", "plugins { }"))
+    }
+
+    @Test
+    fun packageSettingEditsManifestGradleAndMatchingSourcePackages() {
+        val manifest = replaceManifestPackage(
+            """<manifest package="com.example.old"><application /></manifest>""",
+            "org.acme.newapp",
+        )
+        assertTrue(manifest.contains("package=\"org.acme.newapp\""))
+
+        val gradle = replaceAndroidBuildPackage(
+            """namespace = "com.example.old"
+               applicationId = "com.example.old"
+            """.trimIndent(),
+            "org.acme.newapp",
+        )
+        assertTrue(gradle.contains("namespace = \"org.acme.newapp\""))
+        assertTrue(gradle.contains("applicationId = \"org.acme.newapp\""))
+
+        val source = replaceSourcePackagePrefixes(
+            "package com.example.old.feature\nclass Screen",
+            listOf("com.example.old"),
+            "org.acme.newapp",
+        )
+        assertTrue(source.startsWith("package org.acme.newapp.feature"))
+    }
+
+    @Test
+    fun sourcePackageRewriteUsesNamespaceEvenWhenAppIdDiffers() {
+        val oldPackages = packageNamesFromProject(
+            "",
+            """namespace = "org.acme.code"
+               applicationId = "com.example.installed"
+            """.trimIndent(),
+        )
+        val source = replaceSourcePackagePrefixes(
+            "package org.acme.code.screens\n",
+            oldPackages,
+            "org.acme.renamed",
+        )
+        assertTrue(source.startsWith("package org.acme.renamed.screens"))
     }
 
     @Test

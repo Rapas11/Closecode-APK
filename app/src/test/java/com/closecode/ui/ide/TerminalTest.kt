@@ -66,6 +66,35 @@ class TerminalTest {
     }
 
     @Test
+    fun ptyOutputCanArriveInChunksAndKeepsTheFinalPartialLine() {
+        val lines = mutableListOf<String>()
+        val framer = TerminalOutputFramer(lines::add)
+
+        framer.append("first\r")
+        framer.append("\nsecond\nlast")
+        assertEquals(listOf("first", "second"), lines)
+        assertTrue(framer.hasPending)
+
+        framer.flushPartial()
+
+        assertEquals(listOf("first", "second", "last"), lines)
+        assertFalse(framer.hasPending)
+    }
+
+    @Test
+    fun debugLogCopyIsBoundedToFiveHundredFacts() {
+        val report = debugLogReport(
+            backEvents = listOf("back press"),
+            scrollEvents = emptyList(),
+            appLines = (1..600).map { "line $it" },
+        )
+
+        assertEquals(500, report.lines().size)
+        assertTrue(report.startsWith("app line 101"))
+        assertTrue(report.endsWith("app line 600"))
+    }
+
+    @Test
     fun theMarkerIsParsedBackIntoASingleExitStatus() {
         assertEquals(0, parseExitMarker("cc-exit:0"))
         assertEquals(127, parseExitMarker("cc-exit:127"))

@@ -82,6 +82,11 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        android.util.Log.i(
+            "CloseCode",
+            "version=${BuildConfig.VERSION_NAME} build=${BuildConfig.VERSION_CODE} " +
+                "source=${BuildConfig.SOURCE_REVISION}",
+        )
         CrashReport.install(filesDir)
         // A crash leaves its trace in a file; the next launch offers it up for copying instead
         // of swallowing it. There is no logcat on a phone, so this dialog is the whole report.
@@ -230,6 +235,10 @@ class MainActivity : ComponentActivity() {
                                         onBack = { nav.popBackStack() },
                                         settings = settings,
                                         onSettingsChange = { settings = settingsStore.write(it) },
+                                        projectRecord = project?.let { repository.find(it.slug) },
+                                        onPackageNameChange = { record ->
+                                            encoded = encodeRecord(record)
+                                        },
                                     )
                                 }
 

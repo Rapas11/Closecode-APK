@@ -64,20 +64,20 @@ class BuildPanelTest {
 
     @Test
     fun aCleanBuildSaysSoAndSaysHowLongItTook() {
-        assertEquals("BUILD SUCCESSFUL · 0 errors in 412 ms", buildResultLine(0, 0, 412))
+        assertEquals("CHECK PASSED · 0 errors in 412 ms", buildResultLine(0, 0, 412))
     }
 
     @Test
     fun aFailedBuildReportsBothCountsAndPointsAtTheFix() {
         val line = buildResultLine(3, 1, 900)
-        assertTrue(line, line.startsWith("BUILD FAILED · 3 errors, 1 warning"))
+        assertTrue(line, line.startsWith("CHECK FAILED · 3 errors, 1 warning"))
         assertTrue(line, line.contains("marked lines"))
     }
 
     @Test
     fun aCleanBuildWithWarningsStillSaysSuccessful() {
         val line = buildResultLine(0, 2, 120)
-        assertTrue(line, line.startsWith("BUILD SUCCESSFUL · 2 warnings"))
+        assertTrue(line, line.startsWith("CHECK PASSED · 2 warnings"))
     }
 
     @Test

@@ -177,7 +177,7 @@ fun IdeGitPanel(
     // remote from the last project cannot travel into this one and look like its own.
     var remoteUrl by remember(projectRoot) { mutableStateOf<String?>(null) }
     var githubBusy by remember(projectRoot) { mutableStateOf(false) }
-    var githubError by remember(projectRoot) { mutableStateOf<String?>(null) }
+    var githubError by remember(projectRoot) { mutableStateOf(tokenStore.storageError) }
     var githubNote by remember(projectRoot) { mutableStateOf<String?>(null) }
     var signInOpen by remember { mutableStateOf(false) }
 
@@ -464,13 +464,13 @@ fun IdeGitPanel(
             onSignIn = { signInOpen = true },
             onClone = { onCloneRequest() },
             onSignOut = {
-                tokenStore.clear()
+                val cleared = tokenStore.clear()
                 githubToken = null
                 account = null
                 repos = emptyList()
                 showRepos = false
                 githubNote = null
-                githubError = null
+                githubError = if (cleared) null else tokenStore.storageError
             },
             onPublish = {
                 val token = githubToken
@@ -563,8 +563,9 @@ fun IdeGitPanel(
     if (signInOpen) {
         GitHubSignIn(
             onSignedIn = { token ->
-                tokenStore.write(token)
-                githubToken = token
+                val saved = tokenStore.write(token)
+                githubToken = token.takeIf { saved }
+                githubError = if (saved) null else tokenStore.storageError
                 signInOpen = false
             },
             onDismiss = { signInOpen = false },

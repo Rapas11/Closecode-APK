@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -50,6 +51,9 @@ import com.closecode.ui.theme.Sans
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
+
+private const val GITHUB_CLIENT_ID_PREFERENCES = "closecode_github_config"
+private const val GITHUB_CLIENT_ID_KEY = "oauth_client_id"
 
 /**
  * A failure a person can act on. The exception class comes first because the messages Android
@@ -104,6 +108,10 @@ internal fun isOfflineFailure(error: Throwable): Boolean {
 /** What a refused authorization reads as. A decline is the user's own tap, not an error. */
 internal fun refusedText(reason: String): String =
     if (reason.contains("declin", ignoreCase = true)) "You did not allow access" else reason
+
+internal fun needsReplacementGitHubClientId(error: String?): Boolean =
+    error?.contains("device_flow_disabled", ignoreCase = true) == true ||
+        error?.contains("incorrect_client_credentials", ignoreCase = true) == true
 
 /** Seconds as M:SS for the code-expiry countdown. */
 internal fun countdownText(totalSec: Int): String {
@@ -160,10 +168,20 @@ internal fun GitHubSignInBody(
     modifier: Modifier = Modifier,
 ) {
     val c = LocalPageColors.current
-    val client = remember { GitHubClient() }
     val clipboard = LocalClipboardManager.current
     val context = LocalContext.current
+    val clientPreferences = remember(context) {
+        context.getSharedPreferences(GITHUB_CLIENT_ID_PREFERENCES, android.content.Context.MODE_PRIVATE)
+    }
+    val storedClientId = remember(clientPreferences) {
+        clientPreferences.getString(GITHUB_CLIENT_ID_KEY, null)
+            ?.takeIf(String::isNotBlank)
+            ?: GitHubClient.CLIENT_ID
+    }
 
+    var clientId by remember { mutableStateOf(storedClientId) }
+    var clientIdInput by remember { mutableStateOf(storedClientId) }
+    val client = remember(clientId) { GitHubClient(clientId = clientId) }
     var code by remember { mutableStateOf<DeviceCode?>(null) }
     var waiting by remember { mutableStateOf(false) }
     var username by remember { mutableStateOf<String?>(null) }
@@ -185,6 +203,23 @@ internal fun GitHubSignInBody(
         offline = false
         failure = null
         attempt++
+    }
+
+    fun useEnteredClientId() {
+        val candidate = clientIdInput.trim()
+        if (candidate.isEmpty()) {
+            failure = "Enter the GitHub OAuth client ID. Do not enter a client secret."
+            return
+        }
+        val saved = clientPreferences.edit()
+            .putString(GITHUB_CLIENT_ID_KEY, candidate)
+            .commit()
+        if (!saved) {
+            failure = "CloseCode could not save the client ID. Please try again."
+            return
+        }
+        clientId = candidate
+        reset()
     }
 
     LaunchedEffect(copied) {
@@ -376,6 +411,26 @@ internal fun GitHubSignInBody(
                 fontSize = 12.sp,
                 fontFamily = Sans,
             )
+        }
+
+        val clientIdRejected = needsReplacementGitHubClientId(failure)
+        if (clientIdRejected) {
+            Text(
+                text = "GitHub rejected the app's client ID. Enter a replacement client ID only; never enter a client secret.",
+                color = c.textMuted,
+                fontSize = 12.sp,
+                fontFamily = Sans,
+                lineHeight = 17.sp,
+            )
+            OutlinedTextField(
+                value = clientIdInput,
+                onValueChange = { clientIdInput = it },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                label = { Text("GitHub OAuth client ID") },
+                supportingText = { Text("Client ID only. Device Flow does not use a client secret.") },
+            )
+            OutlineButton(label = "Use client ID and retry", onClick = ::useEnteredClientId)
         }
 
         when {
