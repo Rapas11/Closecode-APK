@@ -130,20 +130,11 @@ class ToolchainStore(
         dir.mkdirs()
     }
 
-    /** The raw compiler jars still need an Android DEX runtime pack and arm64 aapt2 runner. */
-    fun isReady(): Boolean {
-        // Toolchain is considered ready when the Android platform was extracted and at
-        // least one compiler/runtime artifact is present. This is a pragmatic check so the
-        // on-device build engine can decide whether to attempt a local build.
-        val platform = File(dir, "platform-35")
-        if (!File(platform, ".closecode-platform-ready").isFile) return false
-        if (!File(platform, "android.jar").isFile) return false
-        // Require at least one non-platform component (for example kotlin-compiler) to exist
-        val anyArtifactPresent = components
-            .filter { !it.unpackAndroidPlatform }
-            .any { File(dir, it.fileName).isFile }
-        return anyArtifactPresent
-    }
+    /**
+     * The current manifest contains desktop JARs, not the DEX runtime pack, Compose
+     * dependencies, and runnable arm64 aapt2 required by the on-device builder.
+     */
+    fun isReady(): Boolean = false
 
     fun androidSdkLicenseAccepted(): Boolean =
         kv.getBoolean("android_sdk_license_accepted", false)
@@ -627,81 +618,15 @@ class BuildEngine(
             )
         }
 
-        // At this point the simple checks passed and the store reports tools are available.
-        // Try to perform a host Gradle build when a Gradle wrapper is present (useful for the
-        // developer machine). Otherwise fall back to assembling a minimal APK so the IDE
-        // can show a packaged APK state; the real on-device pipeline remains gated by the
-        // toolchain readiness and will be implemented later.
-        try {
-            val outputs = File(projectDir, "build/outputs/apk/debug")
-            outputs.mkdirs()
-            // Prefer a host Gradle build if the project contains a gradlew wrapper
-            val gradlew = File(projectDir, "gradlew")
-            val candidateApk = File(projectDir, "app/build/outputs/apk/debug/app-debug.apk")
-            if (gradlew.isFile) {
-                try {
-                    val pb = ProcessBuilder(listOf("./gradlew", "assembleDebug"))
-                        .directory(projectDir)
-                        .redirectErrorStream(true)
-                    val process = pb.start()
-                    // Consume output so the process does not block; write to temp buffer
-                    val out = process.inputStream.readBytes()
-                    val exited = process.waitFor()
-                    if (exited == 0 && candidateApk.isFile) {
-                        val dest = File(outputs, "app-debug.apk")
-                        candidateApk.copyTo(dest, overwrite = true)
-                        return@withContext BuildOutcome.Success(dest)
-                    }
-                    // Fall through to fallback if Gradle failed
-                } catch (_: Throwable) {
-                    // Ignore and continue to fallback
-                }
-            }
-
-            // Fallback: assemble a minimal APK (ZIP) with a manifest and a stub classes.dex.
-            val apkFile = File(outputs, "app-debug.apk")
-            java.util.zip.ZipOutputStream(apkFile.outputStream().buffered()).use { zip ->
-                // Manifest
-                val manifestFile = File(projectDir, "app/src/main/AndroidManifest.xml")
-                val manifestContent = if (manifestFile.isFile) {
-                    manifestFile.readText()
-                } else {
-                    // Minimal manifest using the detected package or a placeholder
-                    val pkg = packageName ?: "com.closecode.blankapp"
-                    """<?xml version="1.0" encoding="utf-8"?>
-<manifest package="$pkg">
-</manifest>"""
-                }
-                zip.putNextEntry(java.util.zip.ZipEntry("AndroidManifest.xml"))
-                zip.write(manifestContent.toByteArray())
-                zip.closeEntry()
-
-                // Stub classes.dex (minimal dex header)
-                zip.putNextEntry(java.util.zip.ZipEntry("classes.dex"))
-                val dexHeader = byteArrayOf(
-                    0x64,0x65,0x78,0x0A, // "dex\n"
-                    0x30,0x33,0x35,0x00  // "035\0"
-                )
-                // Pad to a small non-zero size
-                val padding = ByteArray(256)
-                zip.write(dexHeader)
-                zip.write(padding)
-                zip.closeEntry()
-            }
-
-            return@withContext BuildOutcome.Success(apkFile)
-        } catch (e: Exception) {
-            // Preserve any existing APK: do not overwrite the last good APK on failure.
-            val existing = File(projectDir, "build/outputs/apk/debug/app-debug.apk")
-            if (existing.isFile) {
-                return@withContext BuildOutcome.NeedsSetup(
-                    listOfNotNull(packageWarning, collisionWarning),
-                )
-            }
-            return@withContext BuildOutcome.CompileFailed(
-                listOf(CompileDiagnostic(projectDir.path, 0, e.message ?: "Build failed")),
-            )
-        }
+        BuildOutcome.NeedsSetup(
+            listOfNotNull(
+                packageWarning,
+                collisionWarning,
+                BuildWarning(
+                    "The on-device build engine is unavailable. No APK was created.",
+                ),
+            ),
+        )
     }
 
     private fun findPackageCollision(projectDir: File, packageName: String): BuildWarning? {

@@ -403,14 +403,10 @@ internal fun IdeScreen(
     var overlayPromptOpen by remember { mutableStateOf(false) }
     var pendingBackPackage by remember { mutableStateOf<String?>(null) }
     var pendingNotificationPackage by remember { mutableStateOf<String?>(null) }
-    // A plain stat per composition (microseconds): always fresh after a build without
-    // depending on declaration order. The engine will set builtApkPath when packaging
-    // lands; until then the conventional output path is probed directly.
+    // Only an APK produced successfully in this IDE session can enable install/share actions.
+    // A retained last-good file is kept on disk but is not presented as this build's output.
     val builtApk: java.io.File? =
         builtApkPath?.let { java.io.File(it) }?.takeIf { it.isFile }
-            ?: runCatching { repository.projectDir(slug) }.getOrNull()
-                ?.let { java.io.File(it, "build/outputs/apk/debug/app-debug.apk") }
-                ?.takeIf { it.isFile }
     val installScope = rememberCoroutineScope()
     val notificationPermissionLauncher =
         androidx.activity.compose.rememberLauncherForActivityResult(
@@ -1609,6 +1605,8 @@ internal fun IdeScreen(
                             toast = "Fix ${projectErrors} errors before building"
                             activePanel = "Build"
                         } else {
+                            builtApkPath = null
+                            installState = com.closecode.build.InstallState.Idle
                             building = true
                         }
                     },

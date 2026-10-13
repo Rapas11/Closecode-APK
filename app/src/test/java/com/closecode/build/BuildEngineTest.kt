@@ -56,6 +56,46 @@ class BuildEngineTest {
     }
 
     @Test
+    fun platformAndDesktopCompilerJarDoNotEnableApkCreation() = runBlocking {
+        val toolchain = File(temporaryFolder.root, "partial-toolchain").apply { mkdirs() }
+        val platform = File(toolchain, "platform-35").apply { mkdirs() }
+        File(platform, "android.jar").writeText("platform")
+        File(platform, ".closecode-platform-ready").writeText("35")
+        File(toolchain, "kotlin-compiler-embeddable-2.4.0.jar").writeText("desktop jar")
+        val project = temporaryFolder.newFolder("partial-project")
+        val manifest = File(project, "app/src/main/AndroidManifest.xml")
+        checkNotNull(manifest.parentFile).mkdirs()
+        manifest.writeText("""<manifest package="com.closecode.demo" />""")
+
+        val store = ToolchainStore(
+            toolchain,
+            InMemoryKeyValueStore(),
+            components = listOf(ToolchainManifest.components.first()),
+            minimumFreeBytes = 0,
+        )
+
+        assertFalse(store.isReady())
+        val result = BuildEngine(store).build(project)
+
+        assertTrue(result is BuildOutcome.NeedsSetup)
+        assertFalse(File(project, "build/outputs/apk/debug/app-debug.apk").exists())
+    }
+
+    @Test
+    fun missingBuildEnginePreservesLastGoodApkButDoesNotReportSuccess() = runBlocking {
+        val project = temporaryFolder.newFolder("project-with-last-good-apk")
+        val lastGoodApk = File(project, "build/outputs/apk/debug/app-debug.apk")
+        checkNotNull(lastGoodApk.parentFile).mkdirs()
+        val existingBytes = byteArrayOf(1, 2, 3, 4)
+        lastGoodApk.writeBytes(existingBytes)
+
+        val result = BuildEngine(newStore()).build(project)
+
+        assertTrue(result is BuildOutcome.NeedsSetup)
+        assertEquals(existingBytes.toList(), lastGoodApk.readBytes().toList())
+    }
+
+    @Test
     fun toolchainManifestUsesPinnedHttpsArtifactsWithChecksumsAndLicenses() {
         assertTrue(ToolchainManifest.components.isNotEmpty())
         assertTrue(ToolchainManifest.components.all { component ->
