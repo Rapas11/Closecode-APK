@@ -403,8 +403,8 @@ fun HeroScreen(
 
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val viewport = maxWidth
-        val headlineSize = (viewport.value * 0.082f).coerceIn(38f, 76f).sp
-        val subSize = (viewport.value * 0.024f).coerceIn(16f, 19f).sp
+        val headlineSize = (viewport.value * 0.082f).coerceIn(30f, 42f).sp
+        val subSize = (viewport.value * 0.024f).coerceIn(14f, 16.5f).sp
 
         PageBackground()
 
@@ -413,29 +413,29 @@ fun HeroScreen(
                 .fillMaxSize()
                 .systemBarsPadding()
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 22.dp, vertical = 48.dp),
+                .padding(horizontal = 20.dp, vertical = 36.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center,
         ) {
             Reveal(1) { Wordmark() }
-            Spacer(Modifier.height(34.dp))
+            Spacer(Modifier.height(30.dp))
 
             Reveal(2) {
                 Text(
                     text = "THE ANDROID IDE FOR YOUR PHONE",
                     color = c.ac,
-                    fontSize = 12.5.sp,
+                    fontSize = 12.sp,
                     fontFamily = Mono,
                     fontWeight = FontWeight.Medium,
                     letterSpacing = 0.08.em,
                     textAlign = TextAlign.Center,
                 )
             }
-            Spacer(Modifier.height(18.dp))
+            Spacer(Modifier.height(16.dp))
 
             Reveal(3) { Headline(headlineSize) }
 
-            Spacer(Modifier.height(22.dp))
+            Spacer(Modifier.height(20.dp))
 
             Reveal(4) {
                 Text(
@@ -443,18 +443,21 @@ fun HeroScreen(
                         "No laptop, no setup, no compromise.",
                     color = c.mu,
                     fontSize = subSize,
-                    lineHeight = subSize * 1.6f,
+                    lineHeight = subSize * 1.55f,
                     fontFamily = Sans,
                     textAlign = TextAlign.Center,
-                    modifier = Modifier.widthIn(max = 460.dp),
+                    modifier = Modifier.widthIn(max = 440.dp),
                 )
             }
 
-            Spacer(Modifier.height(34.dp))
+            Spacer(Modifier.height(30.dp))
 
             Reveal(5) {
-                Column(horizontalAlignment = Alignment.End) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    androidx.compose.foundation.layout.FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally),
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
                         Pill(
                             label = "Start a project",
                             primary = true,

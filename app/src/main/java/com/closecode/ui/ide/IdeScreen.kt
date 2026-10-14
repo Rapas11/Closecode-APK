@@ -43,6 +43,8 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.wrapContentHeight
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -2544,26 +2546,31 @@ private fun IdeTopBar(
 ) {
     val c = LocalPageColors.current
 
-    Row(
+    Column(
         Modifier
             .fillMaxWidth()
-            .height(52.dp)
             .background(c.panel)
-            .drawBehind {
-                drawLine(
-                    color = c.divider,
-                    start = androidx.compose.ui.geometry.Offset(0f, size.height - 0.5f),
-                    end = androidx.compose.ui.geometry.Offset(size.width, size.height - 0.5f),
-                    strokeWidth = 1f,
-                )
-            }
-            .padding(horizontal = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
+            .statusBarsPadding(),
     ) {
-        // The drawer button opens the file list; the project name fills the free width so the
-        // actions sit against the right edge. Going back is the system Back button and gesture,
-        // which the screen's own handler owns — no arrow here.
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .height(56.dp)
+                .drawBehind {
+                    drawLine(
+                        color = c.divider,
+                        start = androidx.compose.ui.geometry.Offset(0f, size.height - 0.5f),
+                        end = androidx.compose.ui.geometry.Offset(size.width, size.height - 0.5f),
+                        strokeWidth = 1f,
+                    )
+                }
+                .padding(horizontal = 10.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            // The drawer button opens the file list; the project name fills the free width so the
+            // actions sit against the right edge. Going back is the system Back button and gesture,
+            // which the screen's own handler owns — no arrow here.
         HeaderIconButton(
             icon = CcIcons.Drawer,
             label = "Menu",
@@ -2648,6 +2655,7 @@ private fun IdeTopBar(
             onClick = onMore,
         )
     }
+}
 }
 
 /**
@@ -3126,6 +3134,8 @@ private fun IdeExplorer(
             .width(width)
             .fillMaxHeight()
             .background(c.surface)
+            .statusBarsPadding()
+            .navigationBarsPadding()
             .drawBehind {
                 drawLine(
                     color = c.surfaceBorder,
@@ -6751,6 +6761,7 @@ private fun IdeNav(
         modifier
             .fillMaxWidth()
             .background(c.panel)
+            .navigationBarsPadding()
             // Spec 4.2: a 1 dp top border, no pill or indicator behind the active item.
             .border(1.dp, c.ln, RoundedCornerShape(0.dp)),
         verticalAlignment = Alignment.CenterVertically,

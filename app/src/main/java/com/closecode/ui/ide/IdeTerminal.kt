@@ -25,6 +25,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.items
@@ -830,6 +831,7 @@ internal fun IdeTerminal(
             Modifier
                 .fillMaxWidth()
                 .background(c.bg)
+                .statusBarsPadding()
                 .drawBehind {
                     drawLine(
                         color = c.divider,
@@ -838,7 +840,7 @@ internal fun IdeTerminal(
                         strokeWidth = 1f,
                     )
                 }
-                .padding(horizontal = 12.dp, vertical = 10.dp),
+                .padding(horizontal = 12.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
     // The header button walks the same inner-first order as system Back — form, dialog,
