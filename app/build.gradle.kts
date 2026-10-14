@@ -61,6 +61,8 @@ android {
     buildTypes {
         debug {
             signingConfig = signingConfigs.getByName("debugConfig")
+            applicationIdSuffix = ".alt"
+            versionNameSuffix = "-alt"
         }
         release {
             isMinifyEnabled = false
